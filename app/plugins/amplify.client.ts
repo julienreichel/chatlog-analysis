@@ -6,7 +6,7 @@ import { Amplify } from 'aws-amplify'
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
-  const { cognitoUserPoolId, cognitoUserPoolClientId, cognitoRegion } = config.public
+  const { cognitoUserPoolId, cognitoUserPoolClientId } = config.public
 
   if (!cognitoUserPoolId || !cognitoUserPoolClientId) {
     console.warn('[amplify] Cognito credentials not configured – auth will not work')
