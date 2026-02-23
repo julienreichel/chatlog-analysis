@@ -1,29 +1,16 @@
 {
-  "name": "chatlog-analysis",
+  "name": "chatlog-analysis-monorepo",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "app",
+    "amplify"
+  ],
   "scripts": {
-    "dev": "nuxt dev",
-    "build": "nuxt build",
-    "preview": "nuxt preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "nuxt typecheck"
-  },
-  "dependencies": {
-    "@aws-amplify/ui-vue": "^4.4.0",
-    "@aws-sdk/client-dynamodb": "^3.995.0",
-    "@aws-sdk/lib-dynamodb": "^3.995.0",
-    "aws-amplify": "^6.16.2",
-    "jose": "^6.1.3",
-    "nuxt": "3.19.3"
-  },
-  "devDependencies": {
-    "@nuxt/test-utils": "^3.15.4",
-    "@types/node": "^22.13.4",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "dev": "npm run dev --workspace=app",
+    "build": "npm run build --workspace=app",
+    "test": "npm run test --workspace=app && npm run test --workspace=amplify",
+    "typecheck": "npm run typecheck --workspace=app && npm run typecheck --workspace=amplify",
+    "lint": "npm run lint --workspace=app && npm run lint --workspace=amplify"
   }
 }
