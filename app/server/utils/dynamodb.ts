@@ -230,6 +230,9 @@ export async function touchLastUsed(
 
 // ─── Analysis Request Types ───────────────────────────────────────────────────
 
+/** Maximum allowed request body size for analysis endpoints (256 KB). */
+export const MAX_PAYLOAD_BYTES = 256 * 1024
+
 export interface DiscussionMessage {
   role: string
   content: string
