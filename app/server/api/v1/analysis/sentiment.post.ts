@@ -1,22 +1,24 @@
 /**
  * POST /v1/analysis/sentiment
  *
- * Analyzes the sentiment of a structured discussion (per-message + summary).
+ * Analyzes the sentiment of a structured discussion (per-message + summary)
+ * using Amazon Comprehend DetectSentiment.
  * Protected via X-API-Key middleware (see server/middleware/api-key-auth.ts).
  *
  * Request body:
  *   conversationId? (string)
+ *   languageCode?   (string, default 'en')
  *   messages: Array<{ role: string, content: string, timestamp?: string }>
  *   model?, channel?, tags?
  *
- * Response: { callId, createdAt, conversationId?, perMessage: [...], summary: {...} }
- *
- * NOTE: This is a stub implementation.  Replace the body of `analyzeSentiment`
- * with a real model call (e.g., AWS Comprehend or an ML service).
+ * Response: { requestId, callId, endpointType, createdAt, durationMs,
+ *             conversationId?, messages: [...], summary: {...} }
  */
 import { createAnalysisCall, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
+import { detectSentiment, type SentimentLabel } from '~/server/utils/comprehendClient'
 
 export default defineEventHandler(async (event) => {
+  const startMs = Date.now()
   const body = await readBody(event)
 
   if (JSON.stringify(body ?? {}).length > MAX_PAYLOAD_BYTES) {
@@ -39,6 +41,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  const languageCode: string = typeof body.languageCode === 'string' ? body.languageCode : 'en'
   const conversationId: string | undefined = typeof body.conversationId === 'string' ? body.conversationId : undefined
   const metadata: DiscussionMetadata | undefined = (body.model || body.channel || body.tags)
     ? {
@@ -48,20 +51,34 @@ export default defineEventHandler(async (event) => {
       }
     : undefined
 
-  const perMessage = messages.map(msg => ({
-    role: msg.role,
-    content: msg.content,
-    ...(msg.timestamp ? { timestamp: msg.timestamp } : {}),
-    ...analyzeSentiment(msg.content),
-  }))
-
-  const allSentiments = perMessage.map(r => r.sentiment)
-  const summary = aggregateSentiment(allSentiments)
-
-  const results = { perMessage, summary }
-
   const config = useRuntimeConfig()
   const userId = event.context.userId as string
+
+  // Run Comprehend DetectSentiment per message
+  let sentimentResults: Awaited<ReturnType<typeof detectSentiment>>[]
+  try {
+    sentimentResults = await Promise.all(
+      messages.map(msg => detectSentiment(msg.content, config.awsRegion, languageCode)),
+    )
+  }
+  catch (err) {
+    console.error('[sentiment] Comprehend error', { userId, messageCount: messages.length, err })
+    throw createError({ statusCode: 502, message: 'Upstream analysis service error' })
+  }
+
+  const responseMessages = messages.map((msg, i) => ({
+    index: i,
+    role: msg.role,
+    contentLength: msg.content.length,
+    ...(msg.timestamp ? { timestamp: msg.timestamp } : {}),
+    sentiment: sentimentResults[i],
+  }))
+
+  const allSentiments = sentimentResults.map(r => r.sentiment)
+  const summary = aggregateSentiment(allSentiments, sentimentResults.map(r => r.scores))
+
+  const results = { messages: responseMessages, summary }
+
   const record = await createAnalysisCall(
     userId,
     'sentiment',
@@ -73,53 +90,48 @@ export default defineEventHandler(async (event) => {
     metadata,
   )
 
+  const durationMs = Date.now() - startMs
+  console.info('[sentiment] completed', { requestId: record.callId, userId, messageCount: messages.length, durationMs })
+
   return {
+    requestId: record.callId,
     callId: record.callId,
+    endpointType: 'sentiment' as const,
     createdAt: record.createdAt,
+    durationMs,
     ...(conversationId ? { conversationId } : {}),
-    perMessage,
+    messages: responseMessages,
     summary,
   }
 })
 
-// ─── Stub implementation ──────────────────────────────────────────────────────
+// ─── Aggregation helpers ──────────────────────────────────────────────────────
 
-type Sentiment = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'MIXED'
+type Sentiment = SentimentLabel
 
-interface SentimentResult {
-  sentiment: Sentiment
-  scores: Record<Sentiment, number>
-}
-
-function analyzeSentiment(text: string): SentimentResult {
-  // TODO: replace with real NLP / AWS Comprehend call
-  const lower = text.toLowerCase()
-  const positive = (lower.match(/\b(good|great|love|happy|excellent|awesome)\b/g) ?? []).length
-  const negative = (lower.match(/\b(bad|hate|awful|terrible|horrible|sad)\b/g) ?? []).length
-
-  let sentiment: Sentiment = 'NEUTRAL'
-  if (positive > negative) sentiment = 'POSITIVE'
-  else if (negative > positive) sentiment = 'NEGATIVE'
-  else if (positive > 0 && negative > 0) sentiment = 'MIXED'
-
-  const total = Math.max(positive + negative, 1)
-  return {
-    sentiment,
-    scores: {
-      POSITIVE: positive / total,
-      NEGATIVE: negative / total,
-      NEUTRAL: sentiment === 'NEUTRAL' ? 1 : 0,
-      MIXED: sentiment === 'MIXED' ? 1 : 0,
-    },
-  }
-}
-
-function aggregateSentiment(sentiments: Sentiment[]): { dominant: Sentiment, counts: Record<Sentiment, number> } {
+export function aggregateSentiment(
+  sentiments: Sentiment[],
+  scores: Record<Sentiment, number>[],
+): {
+  dominant: Sentiment
+  counts: Record<Sentiment, number>
+  avgScores: Record<Sentiment, number>
+} {
   const counts: Record<Sentiment, number> = { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0, MIXED: 0 }
   for (const s of sentiments) counts[s]++
+
   const dominant = sentiments.length === 0
     ? 'NEUTRAL'
     : (Object.entries(counts) as [Sentiment, number][])
         .reduce((a, b) => (b[1] > a[1] ? b : a))[0]
-  return { dominant, counts }
+
+  const n = Math.max(sentiments.length, 1)
+  const avgScores: Record<Sentiment, number> = { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0, MIXED: 0 }
+  for (const s of scores) {
+    for (const key of Object.keys(avgScores) as Sentiment[]) {
+      avgScores[key] += (s[key] ?? 0) / n
+    }
+  }
+
+  return { dominant, counts, avgScores }
 }
