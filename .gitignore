@@ -141,3 +141,4 @@ vite.config.ts.timestamp-*
 # Amplify Gen 2
 amplify/dist/
 .amplify/
+amplify_outputs.json
