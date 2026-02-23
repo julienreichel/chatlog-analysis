@@ -53,7 +53,7 @@ async function handleLogin() {
   errorMsg.value = ''
   try {
     await login(email.value, password.value)
-    await router.push('/api-keys')
+    await router.push('/history')
   }
   catch (err: unknown) {
     errorMsg.value = err instanceof Error ? err.message : 'Login failed'

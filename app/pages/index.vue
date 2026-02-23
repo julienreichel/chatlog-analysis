@@ -1,8 +1,11 @@
 <template>
   <div class="home-page">
     <h1>Chatlog Analysis</h1>
-    <p>Welcome! Use the navigation to manage your API keys.</p>
-    <NuxtLink to="/api-keys" class="btn-primary">Manage API Keys →</NuxtLink>
+    <p>Welcome! Use the navigation to manage your API keys and view analysis history.</p>
+    <div class="btn-group">
+      <NuxtLink to="/history" class="btn-primary">View History →</NuxtLink>
+      <NuxtLink to="/settings/api-keys" class="btn-secondary">Manage API Keys →</NuxtLink>
+    </div>
   </div>
 </template>
 
@@ -29,6 +32,13 @@ p {
   margin-bottom: 2rem;
 }
 
+.btn-group {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .btn-primary {
   display: inline-block;
   padding: 0.625rem 1.25rem;
@@ -41,5 +51,19 @@ p {
 
 .btn-primary:hover {
   background: #4f46e5;
+}
+
+.btn-secondary {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  background: #e5e7eb;
+  color: #374151;
+  text-decoration: none;
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  background: #d1d5db;
 }
 </style>
