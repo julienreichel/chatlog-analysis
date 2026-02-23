@@ -52,12 +52,12 @@ interface HistoryRow {
 const { calls, loading, error, fetchHistory } = useHistory()
 
 const columns: TableColumn<HistoryRow>[] = [
-  { key: 'requestId', label: 'Request ID' },
-  { key: 'createdAt', label: 'Created' },
-  { key: 'endpointType', label: 'Type' },
-  { key: 'messageCount', label: 'Messages' },
-  { key: 'status', label: 'Status' },
-  { key: 'durationMs', label: 'Duration' },
+  { accessorKey: 'requestId', header: 'Request ID' },
+  { accessorKey: 'createdAt', header: 'Created' },
+  { accessorKey: 'endpointType', header: 'Type' },
+  { accessorKey: 'messageCount', header: 'Messages' },
+  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'durationMs', header: 'Duration' },
 ]
 
 const tableRows = computed<HistoryRow[]>(() =>

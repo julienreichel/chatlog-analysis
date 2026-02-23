@@ -190,8 +190,7 @@ export async function getApiKeyByHash(
 
   if (!result.Items || result.Items.length === 0) return null
 
-  const item = result.Items[0]
-  // Extract userId from pk attribute ("USER#<userId>")
+  const item = result.Items[0]!
   const rawPk = item.pk as string | undefined
   const userId = rawPk?.startsWith('USER#') ? rawPk.slice(5) : ''
 
@@ -384,7 +383,7 @@ export async function getAnalysisCallById(
 
   if (!result.Items || result.Items.length === 0) return null
 
-  const item = result.Items[0]
+  const item = result.Items[0]!
   return {
     userId: item.userId as string,
     callId: item.callId as string,
