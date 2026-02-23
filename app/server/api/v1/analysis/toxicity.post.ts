@@ -18,6 +18,8 @@ import { detectToxicContentBatch } from '~/server/utils/comprehendClient'
 
 // Maximum number of text segments accepted by DetectToxicContent in a single call.
 const COMPREHEND_TOXICITY_BATCH_SIZE = 10
+
+export default defineEventHandler(async (event) => {
   const startMs = Date.now()
   const body = await readBody(event)
 
