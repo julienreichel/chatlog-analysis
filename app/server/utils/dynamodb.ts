@@ -25,7 +25,6 @@ import {
 } from '@aws-sdk/client-dynamodb'
 import {
   DynamoDBDocumentClient,
-  GetCommand,
   PutCommand,
   QueryCommand,
   UpdateCommand,
