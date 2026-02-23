@@ -1,7 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
+  future: { compatibilityVersion: 4 },
   devtools: { enabled: true },
+  modules: ['@nuxt/ui', '@nuxt/eslint'],
 
   runtimeConfig: {
     // Private server-side keys (never exposed to browser)
