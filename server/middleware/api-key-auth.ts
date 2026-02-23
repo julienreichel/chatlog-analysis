@@ -47,6 +47,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'API key has been revoked' })
   }
 
+  // Attach authenticated user identity to event context for downstream handlers.
+  event.context.userId = record.userId
+  event.context.keyId = record.keyId
+
   // touchLastUsed is best-effort – don't fail the request if it errors.
   if (record.userId) {
     touchLastUsed(record.userId, record.keyId, dynamoTableName, awsRegion).catch(() => {})
