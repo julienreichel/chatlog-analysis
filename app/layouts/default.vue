@@ -3,7 +3,8 @@
     <nav class="navbar">
       <NuxtLink to="/" class="brand">Chatlog Analysis</NuxtLink>
       <div class="nav-actions">
-        <NuxtLink to="/api-keys">API Keys</NuxtLink>
+        <NuxtLink to="/history">History</NuxtLink>
+        <NuxtLink to="/settings/api-keys">API Keys</NuxtLink>
         <button v-if="isLoggedIn" class="btn-logout" @click="handleLogout">
           Sign out
         </button>
