@@ -14,10 +14,14 @@
  * NOTE: This is a stub implementation.  Replace the body of `analyzeToxicity`
  * with a real model call (e.g., a moderation API or ML model).
  */
-import { createAnalysisCall, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
+import { createAnalysisCall, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
+
+  if (JSON.stringify(body ?? {}).length > MAX_PAYLOAD_BYTES) {
+    throw createError({ statusCode: 413, message: 'Payload too large (max 256 KB)' })
+  }
 
   if (!Array.isArray(body?.messages) || body.messages.length === 0) {
     throw createError({ statusCode: 400, message: '`messages` array is required and must not be empty' })

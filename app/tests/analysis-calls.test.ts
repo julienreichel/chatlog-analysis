@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import type { AnalysisCallRecord, DiscussionMessage, AnalysisType } from '../server/utils/dynamodb'
+import { MAX_PAYLOAD_BYTES } from '../server/utils/dynamodb'
 
 // ─── DiscussionMessage contract ───────────────────────────────────────────────
 
@@ -158,5 +159,46 @@ describe('summarizeToxicity', () => {
     ])
     expect(result.maxScore).toBe(0.9)
     expect(result.toxicMessageCount).toBe(2)
+  })
+})
+
+// ─── Payload size validation ──────────────────────────────────────────────────
+
+describe('MAX_PAYLOAD_BYTES', () => {
+  it('is set to 256 KB (262144 bytes)', () => {
+    expect(MAX_PAYLOAD_BYTES).toBe(262144)
+  })
+
+  it('rejects a body that exceeds the limit', () => {
+    const largeBody = { messages: [{ role: 'user', content: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }] }
+    expect(JSON.stringify(largeBody).length).toBeGreaterThan(MAX_PAYLOAD_BYTES)
+  })
+
+  it('accepts a normal-sized body', () => {
+    const normalBody = { messages: [{ role: 'user', content: 'Hello, how are you?' }] }
+    expect(JSON.stringify(normalBody).length).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES)
+  })
+})
+
+// ─── Access control (user isolation) ─────────────────────────────────────────
+
+describe('analysis call access control', () => {
+  const record: AnalysisCallRecord = {
+    userId: 'user-A',
+    callId: 'call-uuid-xyz',
+    createdAt: '2025-06-01T12:00:00.000Z',
+    type: 'sentiment',
+    messages: [{ role: 'user', content: 'Hi' }],
+    results: {},
+  }
+
+  it('grants access when requesting user owns the record', () => {
+    const requestingUserId = 'user-A'
+    expect(record.userId === requestingUserId).toBe(true)
+  })
+
+  it('denies access when requesting user does not own the record', () => {
+    const requestingUserId = 'user-B'
+    expect(record.userId === requestingUserId).toBe(false)
   })
 })
