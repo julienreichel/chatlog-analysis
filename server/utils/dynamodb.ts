@@ -25,6 +25,7 @@ import {
 } from '@aws-sdk/client-dynamodb'
 import {
   DynamoDBDocumentClient,
+  GetCommand,
   PutCommand,
   QueryCommand,
   UpdateCommand,
@@ -225,4 +226,171 @@ export async function touchLastUsed(
     UpdateExpression: 'SET lastUsedAt = :now',
     ExpressionAttributeValues: { ':now': new Date().toISOString() },
   }))
+}
+
+// ─── Analysis Request Types ───────────────────────────────────────────────────
+
+export interface DiscussionMessage {
+  role: string
+  content: string
+  timestamp?: string
+}
+
+export interface DiscussionMetadata {
+  model?: string
+  channel?: string
+  tags?: string[]
+}
+
+export type AnalysisType = 'sentiment' | 'toxicity'
+
+export interface AnalysisCallRecord {
+  userId: string
+  callId: string
+  createdAt: string
+  type: AnalysisType
+  conversationId?: string
+  messages: DiscussionMessage[]
+  metadata?: DiscussionMetadata
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  results: Record<string, any>
+}
+
+// ─── Analysis Request Persistence ────────────────────────────────────────────
+
+/**
+ * AnalysisRequests table schema
+ * -----------------------------------
+ * pk  = "USER#<userId>"
+ * sk  = "CALL#<ISO-timestamp>#<callId>"
+ *
+ * Additional attribute:
+ *   callId  – stored separately to allow GSI lookup by callId alone.
+ *
+ * GSI "CallIdIndex":  callId (pk)
+ */
+
+function analysisPk(userId: string) {
+  return `USER#${userId}`
+}
+
+function analysisSk(createdAt: string, callId: string) {
+  return `CALL#${createdAt}#${callId}`
+}
+
+/**
+ * Persist a new analysis call record.
+ */
+export async function createAnalysisCall(
+  userId: string,
+  type: AnalysisType,
+  messages: DiscussionMessage[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  results: Record<string, any>,
+  tableName: string,
+  region: string,
+  conversationId?: string,
+  metadata?: DiscussionMetadata,
+): Promise<AnalysisCallRecord> {
+  const client = getDocClient(region)
+  const callId = randomUUID()
+  const createdAt = new Date().toISOString()
+
+  const record: AnalysisCallRecord = {
+    userId,
+    callId,
+    createdAt,
+    type,
+    messages,
+    results,
+    ...(conversationId ? { conversationId } : {}),
+    ...(metadata ? { metadata } : {}),
+  }
+
+  await client.send(new PutCommand({
+    TableName: tableName,
+    Item: {
+      pk: analysisPk(userId),
+      sk: analysisSk(createdAt, callId),
+      callId,
+      userId,
+      createdAt,
+      type,
+      messages,
+      results,
+      ...(conversationId ? { conversationId } : {}),
+      ...(metadata ? { metadata } : {}),
+    },
+    ConditionExpression: 'attribute_not_exists(pk)',
+  }))
+
+  return record
+}
+
+/**
+ * List analysis calls for a user, newest first.
+ */
+export async function listAnalysisCalls(
+  userId: string,
+  tableName: string,
+  region: string,
+  limit = 50,
+): Promise<AnalysisCallRecord[]> {
+  const client = getDocClient(region)
+
+  const result = await client.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': analysisPk(userId),
+      ':skPrefix': 'CALL#',
+    },
+    ScanIndexForward: false,
+    Limit: limit,
+  }))
+
+  return (result.Items ?? []).map(item => ({
+    userId: item.userId as string,
+    callId: item.callId as string,
+    createdAt: item.createdAt as string,
+    type: item.type as AnalysisType,
+    conversationId: item.conversationId as string | undefined,
+    messages: item.messages as DiscussionMessage[],
+    metadata: item.metadata as DiscussionMetadata | undefined,
+    results: item.results as Record<string, unknown>,
+  }))
+}
+
+/**
+ * Retrieve a single analysis call by callId using the CallIdIndex GSI.
+ * The caller should verify that the returned record belongs to the requesting user.
+ */
+export async function getAnalysisCallById(
+  callId: string,
+  tableName: string,
+  region: string,
+): Promise<AnalysisCallRecord | null> {
+  const client = getDocClient(region)
+
+  const result = await client.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: 'CallIdIndex',
+    KeyConditionExpression: 'callId = :callId',
+    ExpressionAttributeValues: { ':callId': callId },
+    Limit: 1,
+  }))
+
+  if (!result.Items || result.Items.length === 0) return null
+
+  const item = result.Items[0]
+  return {
+    userId: item.userId as string,
+    callId: item.callId as string,
+    createdAt: item.createdAt as string,
+    type: item.type as AnalysisType,
+    conversationId: item.conversationId as string | undefined,
+    messages: item.messages as DiscussionMessage[],
+    metadata: item.metadata as DiscussionMetadata | undefined,
+    results: item.results as Record<string, unknown>,
+  }
 }

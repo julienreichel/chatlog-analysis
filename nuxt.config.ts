@@ -6,6 +6,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Private server-side keys (never exposed to browser)
     dynamoTableName: process.env.DYNAMO_TABLE_NAME || 'chatlog-api-keys',
+    dynamoAnalysisTableName: process.env.DYNAMO_ANALYSIS_TABLE_NAME || 'chatlog-analysis-requests',
     awsRegion: process.env.AWS_REGION || 'us-east-1',
     apiKeyHmacSecret: process.env.API_KEY_HMAC_SECRET || '',
 
