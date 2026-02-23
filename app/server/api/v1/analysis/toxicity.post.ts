@@ -1,7 +1,8 @@
 /**
  * POST /v1/analysis/toxicity
  *
- * Analyzes the toxicity of a structured discussion (per-message + summary).
+ * Analyzes the toxicity of a structured discussion (per-message + summary)
+ * using Amazon Comprehend DetectToxicContent.
  * Protected via X-API-Key middleware (see server/middleware/api-key-auth.ts).
  *
  * Request body:
@@ -9,14 +10,15 @@
  *   messages: Array<{ role: string, content: string, timestamp?: string }>
  *   model?, channel?, tags?
  *
- * Response: { callId, createdAt, conversationId?, perMessage: [...], summary: {...} }
- *
- * NOTE: This is a stub implementation.  Replace the body of `analyzeToxicity`
- * with a real model call (e.g., a moderation API or ML model).
+ * Response: { requestId, callId, endpointType, createdAt, durationMs,
+ *             conversationId?, messages: [...], summary: {...} }
  */
 import { createAnalysisCall, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
+import { detectToxicContentBatch } from '~/server/utils/comprehendClient'
 
-export default defineEventHandler(async (event) => {
+// Maximum number of text segments accepted by DetectToxicContent in a single call.
+const COMPREHEND_TOXICITY_BATCH_SIZE = 10
+  const startMs = Date.now()
   const body = await readBody(event)
 
   if (JSON.stringify(body ?? {}).length > MAX_PAYLOAD_BYTES) {
@@ -48,24 +50,38 @@ export default defineEventHandler(async (event) => {
       }
     : undefined
 
-  const perMessage = messages.map(msg => ({
-    role: msg.role,
-    content: msg.content,
-    ...(msg.timestamp ? { timestamp: msg.timestamp } : {}),
-    ...analyzeToxicity(msg.content),
-  }))
-
-  const maxScore = perMessage.reduce((max, r) => Math.max(max, r.score), 0)
-  const summary = {
-    toxic: perMessage.some(r => r.toxic),
-    maxScore,
-    toxicMessageCount: perMessage.filter(r => r.toxic).length,
-  }
-
-  const results = { perMessage, summary }
-
   const config = useRuntimeConfig()
   const userId = event.context.userId as string
+
+  // Run Comprehend DetectToxicContent in batches of 10 (API limit)
+  let toxicityResults: Awaited<ReturnType<typeof detectToxicContentBatch>>
+  try {
+    const batches: string[][] = []
+    for (let i = 0; i < messages.length; i += COMPREHEND_TOXICITY_BATCH_SIZE) {
+      batches.push(messages.slice(i, i + COMPREHEND_TOXICITY_BATCH_SIZE).map(m => m.content))
+    }
+    const batchResults = await Promise.all(
+      batches.map(batch => detectToxicContentBatch(batch, config.awsRegion)),
+    )
+    toxicityResults = batchResults.flat()
+  }
+  catch (err) {
+    console.error('[toxicity] Comprehend error', { userId, messageCount: messages.length, err })
+    throw createError({ statusCode: 502, message: 'Upstream analysis service error' })
+  }
+
+  const responseMessages = messages.map((msg, i) => ({
+    index: i,
+    role: msg.role,
+    contentLength: msg.content.length,
+    ...(msg.timestamp ? { timestamp: msg.timestamp } : {}),
+    toxicity: toxicityResults[i],
+  }))
+
+  const summary = aggregateToxicity(toxicityResults.map(r => r.toxicity))
+
+  const results = { messages: responseMessages, summary }
+
   const record = await createAnalysisCall(
     userId,
     'toxicity',
@@ -77,43 +93,35 @@ export default defineEventHandler(async (event) => {
     metadata,
   )
 
+  const durationMs = Date.now() - startMs
+  console.info('[toxicity] completed', { requestId: record.callId, userId, messageCount: messages.length, durationMs })
+
   return {
+    requestId: record.callId,
     callId: record.callId,
+    endpointType: 'toxicity' as const,
     createdAt: record.createdAt,
+    durationMs,
     ...(conversationId ? { conversationId } : {}),
-    perMessage,
+    messages: responseMessages,
     summary,
   }
 })
 
-// ─── Stub implementation ──────────────────────────────────────────────────────
+// ─── Aggregation helpers ──────────────────────────────────────────────────────
 
-interface ToxicityResult {
-  toxic: boolean
-  score: number
-  categories: {
-    insult: number
-    threat: number
-    profanity: number
+export function aggregateToxicity(scores: number[]): {
+  maxToxicity: number
+  avgToxicity: number
+  countAbove50: number
+  countAbove80: number
+} {
+  if (scores.length === 0) {
+    return { maxToxicity: 0, avgToxicity: 0, countAbove50: 0, countAbove80: 0 }
   }
-}
-
-function analyzeToxicity(text: string): ToxicityResult {
-  // TODO: replace with real moderation API call
-  const lower = text.toLowerCase()
-  const insultWords = (lower.match(/\b(idiot|stupid|dumb|moron|fool)\b/g) ?? []).length
-  const threatWords = (lower.match(/\b(kill|hurt|destroy|attack|threaten)\b/g) ?? []).length
-  const profanityWords = (lower.match(/\b(damn|hell|crap)\b/g) ?? []).length
-
-  const maxWords = Math.max(text.split(/\s+/).length, 1)
-  const insult = Math.min(insultWords / maxWords, 1)
-  const threat = Math.min(threatWords / maxWords, 1)
-  const profanity = Math.min(profanityWords / maxWords, 1)
-  const score = Math.min((insult + threat + profanity) / 3, 1)
-
-  return {
-    toxic: score > 0.1,
-    score,
-    categories: { insult, threat, profanity },
-  }
+  const maxToxicity = Math.max(...scores)
+  const avgToxicity = scores.reduce((a, b) => a + b, 0) / scores.length
+  const countAbove50 = scores.filter(s => s > 0.5).length
+  const countAbove80 = scores.filter(s => s > 0.8).length
+  return { maxToxicity, avgToxicity, countAbove50, countAbove80 }
 }
