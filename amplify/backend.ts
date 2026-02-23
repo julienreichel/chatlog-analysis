@@ -9,11 +9,17 @@ import {
 } from 'aws-cdk-lib/aws-dynamodb'
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam'
 import { RemovalPolicy } from 'aws-cdk-lib'
+import { Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda'
 
 export const backend = defineBackend({
   auth,
   apiFunction,
 })
+
+// ─── DynamoDB table names (configurable via environment variables) ─────────────
+
+const apiKeysTableName = process.env.DYNAMO_TABLE_NAME ?? 'chatlog-api-keys'
+const analysisTableName = process.env.DYNAMO_ANALYSIS_TABLE_NAME ?? 'chatlog-analysis-requests'
 
 // ─── DynamoDB tables ──────────────────────────────────────────────────────────
 
@@ -29,7 +35,7 @@ const tablesStack = backend.createStack('TablesStack')
  *   pk  = keyHash   (enables O(1) lookup during X-API-Key validation)
  */
 const apiKeysTable = new Table(tablesStack, 'ApiKeysTable', {
-  tableName: 'chatlog-api-keys',
+  tableName: apiKeysTableName,
   partitionKey: { name: 'pk', type: AttributeType.STRING },
   sortKey: { name: 'sk', type: AttributeType.STRING },
   billingMode: BillingMode.PAY_PER_REQUEST,
@@ -52,7 +58,7 @@ apiKeysTable.addGlobalSecondaryIndex({
  *   pk  = callId   (enables O(1) lookup by callId without scanning)
  */
 const analysisTable = new Table(tablesStack, 'AnalysisRequestsTable', {
-  tableName: 'chatlog-analysis-requests',
+  tableName: analysisTableName,
   partitionKey: { name: 'pk', type: AttributeType.STRING },
   sortKey: { name: 'sk', type: AttributeType.STRING },
   billingMode: BillingMode.PAY_PER_REQUEST,
@@ -70,6 +76,12 @@ analysisTable.addGlobalSecondaryIndex({
 const lambdaRole = backend.apiFunction.resources.lambda.role!
 apiKeysTable.grantReadWriteData(lambdaRole)
 analysisTable.grantReadWriteData(lambdaRole)
+
+// ─── Pass table names as Lambda environment variables ─────────────────────────
+
+const lambdaFunction = backend.apiFunction.resources.lambda as LambdaFunction
+lambdaFunction.addEnvironment('DYNAMO_TABLE_NAME', apiKeysTableName)
+lambdaFunction.addEnvironment('DYNAMO_ANALYSIS_TABLE_NAME', analysisTableName)
 
 // ─── IAM: grant apiFunction Lambda access to Amazon Comprehend ───────────────
 
