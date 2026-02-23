@@ -16,6 +16,7 @@
  */
 import { createAnalysisCall, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
 import { detectSentiment, type SentimentLabel } from '~/server/utils/comprehendClient'
+import type { LanguageCode } from '@aws-sdk/client-comprehend'
 
 export default defineEventHandler(async (event) => {
   const startMs = Date.now()
@@ -41,7 +42,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  const languageCode: string = typeof body.languageCode === 'string' ? body.languageCode : 'en'
+  const languageCode = (typeof body.languageCode === 'string' ? body.languageCode : 'en') as LanguageCode
   const conversationId: string | undefined = typeof body.conversationId === 'string' ? body.conversationId : undefined
   const metadata: DiscussionMetadata | undefined = (body.model || body.channel || body.tags)
     ? {

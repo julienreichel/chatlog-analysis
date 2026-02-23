@@ -10,6 +10,7 @@ import {
   ComprehendClient,
   DetectSentimentCommand,
   DetectToxicContentCommand,
+  type LanguageCode,
   type TextSegment,
 } from '@aws-sdk/client-comprehend'
 
@@ -57,7 +58,7 @@ function getClient(region: string): ComprehendClient {
 export async function detectSentiment(
   text: string,
   region: string,
-  languageCode = 'en',
+  languageCode: LanguageCode = 'en',
 ): Promise<SentimentResult> {
   const client = getClient(region)
   const response = await client.send(
@@ -88,7 +89,7 @@ export async function detectSentiment(
 export async function detectToxicContentBatch(
   texts: string[],
   region: string,
-  languageCode = 'en',
+  languageCode: LanguageCode = 'en',
 ): Promise<ToxicityResult[]> {
   if (texts.length === 0) return []
 
@@ -102,7 +103,6 @@ export async function detectToxicContentBatch(
   const resultList = response.ResultList ?? []
 
   return resultList
-    .sort((a, b) => (a.Index ?? 0) - (b.Index ?? 0))
     .map(item => ({
       toxicity: item.Toxicity ?? 0,
       labels: (item.Labels ?? []).map(l => ({

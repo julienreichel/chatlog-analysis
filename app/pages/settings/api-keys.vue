@@ -89,12 +89,12 @@ const newKey = ref<{ key: string } | null>(null)
 const copied = ref(false)
 
 const columns: TableColumn<ApiKeyRow>[] = [
-  { key: 'keyId', label: 'Key ID' },
-  { key: 'label', label: 'Label' },
-  { key: 'createdAt', label: 'Created' },
-  { key: 'lastUsedAt', label: 'Last used' },
-  { key: 'status', label: 'Status' },
-  { key: 'actions', label: '' },
+  { accessorKey: 'keyId', header: 'Key ID' },
+  { accessorKey: 'label', header: 'Label' },
+  { accessorKey: 'createdAt', header: 'Created' },
+  { accessorKey: 'lastUsedAt', header: 'Last used' },
+  { accessorKey: 'status', header: 'Status' },
+  { id: 'actions', header: '' },
 ]
 
 const tableRows = computed<ApiKeyRow[]>(() =>
