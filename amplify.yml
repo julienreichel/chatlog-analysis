@@ -1,0 +1,23 @@
+version: 1
+backend:
+  phases:
+    build:
+      commands:
+        - npm ci --workspace=amplify
+        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci --workspace=app
+    build:
+      commands:
+        - npm run build --workspace=app
+  artifacts:
+    baseDirectory: app/.output/public
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - node_modules/**/*
+      - app/node_modules/**/*
