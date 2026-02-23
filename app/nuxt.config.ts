@@ -31,9 +31,9 @@ export default defineNuxtConfig({
 
     // Public keys (exposed to browser via useRuntimeConfig().public)
     public: {
-      cognitoUserPoolId: process.env.NUXT_PUBLIC_COGNITO_USER_POOL_ID || amplifyOutputs?.auth?.user_pool_id || '',
-      cognitoUserPoolClientId: process.env.NUXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID || amplifyOutputs?.auth?.user_pool_client_id || '',
-      cognitoRegion: process.env.NUXT_PUBLIC_COGNITO_REGION || amplifyOutputs?.auth?.aws_region || DEFAULT_AWS_REGION,
+      cognitoUserPoolId: amplifyOutputs?.auth?.user_pool_id || '',
+      cognitoUserPoolClientId: amplifyOutputs?.auth?.user_pool_client_id || '',
+      cognitoRegion: amplifyOutputs?.auth?.aws_region || DEFAULT_AWS_REGION,
     },
   },
 
