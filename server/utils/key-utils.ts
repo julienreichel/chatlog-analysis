@@ -2,7 +2,7 @@
  * API key generation and hashing utilities.
  *
  * Keys are generated as cryptographically random bytes and encoded in
- * base64url with a recognisable prefix (otk_live_).  The raw key is
+ * base64url with a recognizable prefix (otk_live_).  The raw key is
  * returned to the user exactly once; only the HMAC-SHA-256 digest is
  * persisted in DynamoDB.
  *
