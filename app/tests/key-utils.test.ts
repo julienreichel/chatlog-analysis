@@ -64,6 +64,11 @@ describe('verifyApiKey', () => {
     expect(verifyApiKey(key, '')).toBe(false)
   })
 
+  it('returns false when plaintextKey is empty', () => {
+    const hash = hashApiKey(generateApiKey())
+    expect(verifyApiKey('', hash)).toBe(false)
+  })
+
   it('is not vulnerable to timing side-channels (uses timingSafeEqual)', () => {
     // Structural test: verify that even a key that differs only in the last
     // character is still rejected.
