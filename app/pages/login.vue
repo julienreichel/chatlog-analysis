@@ -1,5 +1,10 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+  <div v-if="checkingSession" class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div class="text-sm text-gray-500 dark:text-gray-400">
+      Checking session...
+    </div>
+  </div>
+  <div v-else class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
     <UCard class="w-full max-w-md">
       <template #header>
         <div>
@@ -51,12 +56,22 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'default' })
 
-const { login, loading } = useAuth()
+const { login, loading, refresh, isLoggedIn } = useAuth()
 const router = useRouter()
 
 const email = ref('')
 const password = ref('')
 const errorMsg = ref('')
+const checkingSession = ref(true)
+
+onMounted(async () => {
+  await refresh()
+  if (isLoggedIn.value) {
+    await router.replace('/history')
+    return
+  }
+  checkingSession.value = false
+})
 
 async function handleLogin() {
   errorMsg.value = ''

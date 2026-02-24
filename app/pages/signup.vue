@@ -1,5 +1,10 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+  <div v-if="checkingSession" class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div class="text-sm text-gray-500 dark:text-gray-400">
+      Checking session...
+    </div>
+  </div>
+  <div v-else class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
     <UCard class="w-full max-w-md">
       <template #header>
         <h1 class="text-xl font-bold">Chatlog Analysis</h1>
@@ -90,7 +95,7 @@
 <script setup lang="ts">
 definePageMeta({ layout: 'default' })
 
-const { signup, confirmSignup, loading } = useAuth()
+const { signup, confirmSignup, loading, refresh, isLoggedIn } = useAuth()
 const router = useRouter()
 
 const email = ref('')
@@ -99,6 +104,16 @@ const confirmPassword = ref('')
 const confirmationCode = ref('')
 const errorMsg = ref('')
 const awaitingConfirmation = ref(false)
+const checkingSession = ref(true)
+
+onMounted(async () => {
+  await refresh()
+  if (isLoggedIn.value) {
+    await router.replace('/history')
+    return
+  }
+  checkingSession.value = false
+})
 
 async function handleSignup() {
   errorMsg.value = ''
