@@ -13,7 +13,7 @@ if (existsSync(amplifyOutputsPath)) {
   }
 }
 
-const DEFAULT_AWS_REGION = 'us-east-1'
+const DEFAULT_AWS_REGION = 'eu-central-1'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
