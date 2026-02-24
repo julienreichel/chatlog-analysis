@@ -17,11 +17,11 @@ export default defineEventHandler(async (event) => {
   const label: string | undefined = typeof body?.label === 'string' ? body.label : undefined
 
   const config = useRuntimeConfig()
-  const { dynamoTableName, awsRegion, apiKeyHmacSecret } = config
+  const { dynamoTableName, awsRegion } = config
 
   // Generate & hash
   const plaintextKey = generateApiKey()
-  const keyHash = hashApiKey(plaintextKey, apiKeyHmacSecret)
+  const keyHash = hashApiKey(plaintextKey)
 
   // Persist (only the hash)
   const metadata = await createApiKeyRecord(userId, keyHash, dynamoTableName, awsRegion, label)
