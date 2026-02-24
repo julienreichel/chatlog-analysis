@@ -1,86 +1,89 @@
 <template>
-  <div class="signup-page">
-    <div class="signup-card">
-      <h1>Chatlog Analysis</h1>
+  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <UCard class="w-full max-w-md">
+      <template #header>
+        <h1 class="text-xl font-bold">Chatlog Analysis</h1>
+      </template>
 
       <template v-if="!awaitingConfirmation">
-        <p class="subtitle">Create your account</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Create your account</p>
 
-        <form @submit.prevent="handleSignup">
-          <div class="field">
-            <label for="email">Email</label>
-            <input
-              id="email"
+        <form class="space-y-4" @submit.prevent="handleSignup">
+          <UFormField label="Email" name="email">
+            <UInput
               v-model="email"
               type="email"
               placeholder="you@example.com"
               autocomplete="email"
               required
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <div class="field">
-            <label for="password">Password</label>
-            <input
-              id="password"
+          <UFormField label="Password" name="password">
+            <UInput
               v-model="password"
               type="password"
               placeholder="••••••••"
               autocomplete="new-password"
               required
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <div class="field">
-            <label for="confirm-password">Confirm Password</label>
-            <input
-              id="confirm-password"
+          <UFormField label="Confirm Password" name="confirmPassword">
+            <UInput
               v-model="confirmPassword"
               type="password"
               placeholder="••••••••"
               autocomplete="new-password"
               required
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+          <UAlert v-if="errorMsg" color="error" :description="errorMsg" />
 
-          <button type="submit" :disabled="loading" class="btn-primary">
-            {{ loading ? 'Creating account…' : 'Sign up' }}
-          </button>
-
-          <p class="login-link">
-            Already have an account? <NuxtLink to="/login">Sign in</NuxtLink>
-          </p>
+          <UButton type="submit" :loading="loading" block>
+            Sign up
+          </UButton>
         </form>
       </template>
 
       <template v-else>
-        <p class="subtitle">Check your email</p>
-        <p class="confirm-info">We sent a verification code to <strong>{{ email }}</strong>. Enter it below to activate your account.</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">Check your email</p>
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-4">
+          We sent a verification code to <strong>{{ email }}</strong>. Enter it below to activate your account.
+        </p>
 
-        <form @submit.prevent="handleConfirm">
-          <div class="field">
-            <label for="code">Verification Code</label>
-            <input
-              id="code"
+        <form class="space-y-4" @submit.prevent="handleConfirm">
+          <UFormField label="Verification Code" name="code">
+            <UInput
               v-model="confirmationCode"
               type="text"
               placeholder="123456"
               autocomplete="one-time-code"
               inputmode="numeric"
               required
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+          <UAlert v-if="errorMsg" color="error" :description="errorMsg" />
 
-          <button type="submit" :disabled="loading" class="btn-primary">
-            {{ loading ? 'Verifying…' : 'Verify email' }}
-          </button>
+          <UButton type="submit" :loading="loading" block>
+            Verify email
+          </UButton>
         </form>
       </template>
-    </div>
+
+      <template #footer>
+        <p v-if="!awaitingConfirmation" class="text-sm text-center text-gray-500 dark:text-gray-400">
+          Already have an account?
+          <ULink to="/login" class="text-primary font-medium">Sign in</ULink>
+        </p>
+      </template>
+    </UCard>
   </div>
 </template>
 
@@ -123,110 +126,3 @@ async function handleConfirm() {
   }
 }
 </script>
-
-<style scoped>
-.signup-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f3f4f6;
-}
-
-.signup-card {
-  background: #fff;
-  padding: 2.5rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  width: 100%;
-  max-width: 400px;
-}
-
-h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0 0 0.25rem;
-}
-
-.subtitle {
-  color: #6b7280;
-  margin: 0 0 1.5rem;
-  font-size: 0.9rem;
-}
-
-.confirm-info {
-  color: #374151;
-  font-size: 0.9rem;
-  margin-bottom: 1.5rem;
-}
-
-.field {
-  margin-bottom: 1rem;
-}
-
-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-}
-
-input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  font-size: 1rem;
-  box-sizing: border-box;
-}
-
-input:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-.error {
-  color: #ef4444;
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 0.625rem;
-  background: #6366f1;
-  color: #fff;
-  border: none;
-  border-radius: 0.375rem;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #4f46e5;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.login-link {
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-  color: #6b7280;
-}
-
-.login-link a {
-  color: #6366f1;
-  text-decoration: none;
-}
-
-.login-link a:hover {
-  text-decoration: underline;
-}
-</style>
