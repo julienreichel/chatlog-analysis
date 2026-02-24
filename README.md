@@ -345,7 +345,7 @@ Set the following for the Nuxt app runtime:
 
 ### 3. IAM permissions for the Nuxt server
 
-The Nuxt server process needs an IAM role/user with the following permissions (replace `<table-name>` with the auto-generated names visible in `amplify_outputs.json`):
+The Nuxt server process needs an IAM role/user with the following permissions. Because DynamoDB table names are auto-generated per Amplify environment (e.g. `TablesStack-ApiKeysTable-ABC123XYZ`), the policy uses a prefix wildcard on the `TablesStack-` namespace:
 
 ```json
 {
@@ -355,10 +355,8 @@ The Nuxt server process needs an IAM role/user with the following permissions (r
     "dynamodb:Query"
   ],
   "Resource": [
-    "arn:aws:dynamodb:<region>:<account>:table/<apiKeysTableName>",
-    "arn:aws:dynamodb:<region>:<account>:table/<apiKeysTableName>/index/*",
-    "arn:aws:dynamodb:<region>:<account>:table/<analysisTableName>",
-    "arn:aws:dynamodb:<region>:<account>:table/<analysisTableName>/index/*"
+    "arn:aws:dynamodb:<region>:<account>:table/TablesStack-*",
+    "arn:aws:dynamodb:<region>:<account>:table/TablesStack-*/index/*"
   ]
 },
 {
