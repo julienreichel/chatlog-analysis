@@ -9,6 +9,7 @@ frontend:
   phases:
     preBuild:
       commands:
+        - npm run aws:ci-check
         - npm ci --workspace=app
     build:
       commands:
