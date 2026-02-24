@@ -34,6 +34,10 @@
         <button type="submit" :disabled="loading" class="btn-primary">
           {{ loading ? 'Signing in…' : 'Sign in' }}
         </button>
+
+        <p class="signup-link">
+          Don't have an account? <NuxtLink to="/signup">Sign up</NuxtLink>
+        </p>
       </form>
     </div>
   </div>
@@ -143,5 +147,21 @@ input:focus {
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.signup-link {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.signup-link a {
+  color: #6366f1;
+  text-decoration: none;
+}
+
+.signup-link a:hover {
+  text-decoration: underline;
 }
 </style>
