@@ -35,6 +35,7 @@ export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
   devtools: { enabled: true },
   modules: ['@nuxt/ui', '@nuxt/eslint'],
+  css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
     // Private server-side keys (never exposed to browser)
