@@ -312,6 +312,7 @@ Run from the **repo root**:
 | `npm run aws:policy` | Print IAM policy JSON with resolved table ARNs |
 | `npm run aws:ci-check` | In CI, print required IAM policy when static AWS keys are missing |
 | `npm run aws:create-local-user` | Create/update local-dev IAM user, attach inline policy, write keys to `app/.env` |
+| `npm run api:test -- --api-key <key>` | Send sample analysis request to `/api/v1/analysis/sentiment` |
 | `npm run test` | Run all tests (app + amplify) |
 | `npm run typecheck` | Typecheck all packages |
 | `npm run lint` | Lint all packages |
@@ -380,3 +381,46 @@ npm run build
 ```
 
 See [Amplify Gen 2 docs](https://docs.amplify.aws/gen2/) for full deployment details.
+
+## Quick API Smoke Test
+
+Use the included helper script to send sample data with your API key.
+
+### Local Nuxt dev server
+
+```bash
+npm run api:test -- --api-key <YOUR_API_KEY>
+```
+
+### Deployed environment
+
+```bash
+npm run api:test -- --api-key <YOUR_API_KEY> --base-url https://<your-domain>
+```
+
+### Toxicity endpoint
+
+```bash
+npm run api:test -- --api-key <YOUR_API_KEY> --type toxicity
+```
+
+### Custom payload
+
+```bash
+npm run api:test -- --api-key <YOUR_API_KEY> --payload ./path/to/payload.json
+```
+
+Payload shape:
+
+```json
+{
+  "conversationId": "sample-001",
+  "model": "gpt-4",
+  "channel": "script-test",
+  "tags": ["sample"],
+  "messages": [
+    { "role": "user", "content": "Message 1" },
+    { "role": "assistant", "content": "Message 2" }
+  ]
+}
+```

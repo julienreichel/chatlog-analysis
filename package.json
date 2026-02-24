@@ -12,6 +12,7 @@
     "aws:policy": "node scripts/aws-iam-helper.mjs --print-policy",
     "aws:ci-check": "node scripts/aws-iam-helper.mjs --ci-check",
     "aws:create-local-user": "node scripts/aws-iam-helper.mjs --create-user --write-env",
+    "api:test": "node scripts/send-sample-analysis.mjs",
     "test": "npm run test --workspace=app && npm run test --workspace=amplify",
     "typecheck": "npm run typecheck --workspace=app && npm run typecheck --workspace=amplify",
     "lint": "npm run lint --workspace=app && npm run lint --workspace=amplify"
