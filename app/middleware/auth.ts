@@ -3,8 +3,8 @@
  * Applied globally so every page that needs auth just uses definePageMeta.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Skip the login page itself
-  if (to.path === '/login') return
+  // Skip the login and signup pages themselves
+  if (to.path === '/login' || to.path === '/signup') return
 
   const { isLoggedIn, refresh } = useAuth()
 

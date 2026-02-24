@@ -8,10 +8,12 @@
  * - getIdToken   (returns the raw JWT for API calls)
  */
 import {
+  confirmSignUp,
   fetchAuthSession,
   getCurrentUser,
   signIn,
   signOut,
+  signUp,
   type AuthUser,
 } from 'aws-amplify/auth'
 
@@ -23,6 +25,8 @@ interface UseAuth {
   logout: () => Promise<void>
   getIdToken: () => Promise<string | null>
   refresh: () => Promise<void>
+  signup: (email: string, password: string) => Promise<void>
+  confirmSignup: (email: string, code: string) => Promise<void>
 }
 
 export function useAuth(): UseAuth {
@@ -70,7 +74,28 @@ export function useAuth(): UseAuth {
     }
   }
 
+  async function signup(email: string, password: string) {
+    loading.value = true
+    try {
+      // username is the Cognito login identifier; email attribute is required for the user pool
+      await signUp({ username: email, password, options: { userAttributes: { email } } })
+    }
+    finally {
+      loading.value = false
+    }
+  }
+
+  async function confirmSignup(email: string, code: string) {
+    loading.value = true
+    try {
+      await confirmSignUp({ username: email, confirmationCode: code })
+    }
+    finally {
+      loading.value = false
+    }
+  }
+
   const isLoggedIn = computed(() => currentUser.value !== null)
 
-  return { currentUser, isLoggedIn, loading, login, logout, getIdToken, refresh }
+  return { currentUser, isLoggedIn, loading, login, logout, getIdToken, refresh, signup, confirmSignup }
 }
