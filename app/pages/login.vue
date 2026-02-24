@@ -1,45 +1,50 @@
 <template>
-  <div class="login-page">
-    <div class="login-card">
-      <h1>Chatlog Analysis</h1>
-      <p class="subtitle">Sign in to manage your API keys</p>
+  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <UCard class="w-full max-w-md">
+      <template #header>
+        <div>
+          <h1 class="text-xl font-bold">Chatlog Analysis</h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to manage your API keys</p>
+        </div>
+      </template>
 
-      <form @submit.prevent="handleLogin">
-        <div class="field">
-          <label for="email">Email</label>
-          <input
-            id="email"
+      <form class="space-y-4" @submit.prevent="handleLogin">
+        <UFormField label="Email" name="email">
+          <UInput
             v-model="email"
             type="email"
             placeholder="you@example.com"
             autocomplete="email"
             required
+            class="w-full"
           />
-        </div>
+        </UFormField>
 
-        <div class="field">
-          <label for="password">Password</label>
-          <input
-            id="password"
+        <UFormField label="Password" name="password">
+          <UInput
             v-model="password"
             type="password"
             placeholder="••••••••"
             autocomplete="current-password"
             required
+            class="w-full"
           />
-        </div>
+        </UFormField>
 
-        <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
+        <UAlert v-if="errorMsg" color="error" :description="errorMsg" />
 
-        <button type="submit" :disabled="loading" class="btn-primary">
-          {{ loading ? 'Signing in…' : 'Sign in' }}
-        </button>
-
-        <p class="signup-link">
-          Don't have an account? <NuxtLink to="/signup">Sign up</NuxtLink>
-        </p>
+        <UButton type="submit" :loading="loading" block>
+          Sign in
+        </UButton>
       </form>
-    </div>
+
+      <template #footer>
+        <p class="text-sm text-center text-gray-500 dark:text-gray-400">
+          Don't have an account?
+          <ULink to="/signup" class="text-primary font-medium">Sign up</ULink>
+        </p>
+      </template>
+    </UCard>
   </div>
 </template>
 
@@ -64,104 +69,3 @@ async function handleLogin() {
   }
 }
 </script>
-
-<style scoped>
-.login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f3f4f6;
-}
-
-.login-card {
-  background: #fff;
-  padding: 2.5rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  width: 100%;
-  max-width: 400px;
-}
-
-h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0 0 0.25rem;
-}
-
-.subtitle {
-  color: #6b7280;
-  margin: 0 0 1.5rem;
-  font-size: 0.9rem;
-}
-
-.field {
-  margin-bottom: 1rem;
-}
-
-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-}
-
-input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  font-size: 1rem;
-  box-sizing: border-box;
-}
-
-input:focus {
-  outline: none;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-}
-
-.error {
-  color: #ef4444;
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 0.625rem;
-  background: #6366f1;
-  color: #fff;
-  border: none;
-  border-radius: 0.375rem;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #4f46e5;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.signup-link {
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.875rem;
-  color: #6b7280;
-}
-
-.signup-link a {
-  color: #6366f1;
-  text-decoration: none;
-}
-
-.signup-link a:hover {
-  text-decoration: underline;
-}
-</style>
