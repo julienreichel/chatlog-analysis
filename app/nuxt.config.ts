@@ -41,7 +41,6 @@ export default defineNuxtConfig({
     dynamoTableName,
     dynamoAnalysisTableName,
     awsRegion: amplifyOutputs?.auth?.aws_region || DEFAULT_AWS_REGION,
-    apiKeyHmacSecret: process.env.API_KEY_HMAC_SECRET || '',
 
     // Public keys (exposed to browser via useRuntimeConfig().public)
     public: {

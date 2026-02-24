@@ -37,7 +37,7 @@ chatlog-analysis/
 │   │       ├── cognito-auth.ts  # Cognito JWT verification helper
 │   │       ├── comprehendClient.ts # AWS Comprehend wrappers
 │   │       ├── dynamodb.ts      # DynamoDB data-access layer
-│   │       └── key-utils.ts     # API key generation & HMAC hashing
+│   │       └── key-utils.ts     # API key generation & SHA-256 hashing
 │   ├── composables/             # useAuth, useApiKeys, useHistory
 │   ├── middleware/auth.ts       # Client-side route guard
 │   └── plugins/amplify.client.ts# AWS Amplify initialisation
@@ -72,7 +72,7 @@ AWS Amplify Gen 2 (infrastructure)
 
 | Route group | Protection | Token |
 |---|---|---|
-| `POST /api/v1/analysis/*` | `X-API-Key` header | HMAC-SHA-256 verified API key |
+| `POST /api/v1/analysis/*` | `X-API-Key` header | SHA-256 verified API key |
 | `GET /api/v1/analysis/calls*` | `X-API-Key` header | Same |
 | `GET/POST /api/v1/auth/api-keys*` | `Authorization: Bearer <jwt>` | Cognito ID Token |
 | `GET /api/v1/internal/history*` | `Authorization: Bearer <jwt>` | Cognito ID Token |
@@ -101,7 +101,7 @@ The sandbox auto-generates `amplify_outputs.json` at the repo root.  This file c
 
 ```bash
 cd app
-cp .env.example .env   # fill in AWS credentials and API_KEY_HMAC_SECRET
+cp .env.example .env   # fill in AWS credentials
 npm install
 npm run dev            # starts Nuxt dev server at http://localhost:3000
 ```
@@ -114,7 +114,6 @@ Create `app/.env` based on `app/.env.example`:
 |---|---|
 | `AWS_ACCESS_KEY_ID` | IAM access key (needs DynamoDB + Comprehend permissions) |
 | `AWS_SECRET_ACCESS_KEY` | IAM secret key |
-| `API_KEY_HMAC_SECRET` | ≥32 random bytes used to HMAC-sign API keys – **never commit this** |
 
 > **AWS region** is read automatically from `amplify_outputs.json` (`auth.aws_region`).  You do not need to set `AWS_REGION` manually.
 >
@@ -273,7 +272,7 @@ Single-table design with one item type.  The physical table name is auto-generat
 | `pk` | String | `"USER#<userId>"` |
 | `sk` | String | `"KEY#<keyId>"` |
 | `keyId` | String | UUID |
-| `keyHash` | String | HMAC-SHA-256 hex digest of the plaintext key |
+| `keyHash` | String | SHA-256 hex digest of the plaintext key |
 | `label` | String | Optional human-readable label |
 | `createdAt` | String | ISO-8601 timestamp |
 | `revokedAt` | String | ISO-8601 timestamp, present only when revoked |
@@ -339,7 +338,7 @@ Set the following for the Nuxt app runtime:
 - `app/.env` (for local dev).
 
 ```
-API_KEY_HMAC_SECRET=<strong-random-secret>
+(no additional variables required)
 ```
 
 > **AWS region, DynamoDB table names, and Cognito settings are all set automatically** from `amplify_outputs.json` written by `npx ampx pipeline-deploy`. No manual entry is required for any of these.

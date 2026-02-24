@@ -27,11 +27,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = useRuntimeConfig()
-  const { dynamoTableName, awsRegion, apiKeyHmacSecret } = config
+  const { dynamoTableName, awsRegion } = config
 
   let keyHash: string
   try {
-    keyHash = hashApiKey(candidateKey, apiKeyHmacSecret)
+    keyHash = hashApiKey(candidateKey)
   }
   catch {
     throw createError({ statusCode: 500, message: 'Server misconfiguration' })

@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateApiKey, hashApiKey, verifyApiKey, KEY_PREFIX } from '../server/utils/key-utils'
 
-const TEST_SECRET = 'test-hmac-secret-that-is-long-enough'
-
 describe('generateApiKey', () => {
   it('returns a string with the correct prefix', () => {
     const key = generateApiKey()
@@ -30,70 +28,48 @@ describe('generateApiKey', () => {
 
 describe('hashApiKey', () => {
   it('returns a 64-character hex string', () => {
-    const hash = hashApiKey('otk_live_test', TEST_SECRET)
+    const hash = hashApiKey('otk_live_test')
     expect(hash).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('is deterministic for the same input', () => {
-    const h1 = hashApiKey('otk_live_abc', TEST_SECRET)
-    const h2 = hashApiKey('otk_live_abc', TEST_SECRET)
+    const h1 = hashApiKey('otk_live_abc')
+    const h2 = hashApiKey('otk_live_abc')
     expect(h1).toBe(h2)
   })
 
   it('produces different hashes for different keys', () => {
-    const h1 = hashApiKey('otk_live_aaa', TEST_SECRET)
-    const h2 = hashApiKey('otk_live_bbb', TEST_SECRET)
+    const h1 = hashApiKey('otk_live_aaa')
+    const h2 = hashApiKey('otk_live_bbb')
     expect(h1).not.toBe(h2)
-  })
-
-  it('produces different hashes for different secrets', () => {
-    const h1 = hashApiKey('otk_live_aaa', TEST_SECRET)
-    const h2 = hashApiKey('otk_live_aaa', 'different-secret')
-    expect(h1).not.toBe(h2)
-  })
-
-  it('throws when secret is empty', () => {
-    expect(() => hashApiKey('otk_live_key', '')).toThrow('API_KEY_HMAC_SECRET is not configured')
   })
 })
 
 describe('verifyApiKey', () => {
   it('returns true for a correct key', () => {
     const key = generateApiKey()
-    const hash = hashApiKey(key, TEST_SECRET)
-    expect(verifyApiKey(key, hash, TEST_SECRET)).toBe(true)
+    const hash = hashApiKey(key)
+    expect(verifyApiKey(key, hash)).toBe(true)
   })
 
   it('returns false for an incorrect key', () => {
     const key = generateApiKey()
-    const hash = hashApiKey(key, TEST_SECRET)
+    const hash = hashApiKey(key)
     const wrongKey = generateApiKey()
-    expect(verifyApiKey(wrongKey, hash, TEST_SECRET)).toBe(false)
-  })
-
-  it('returns false when the secret differs', () => {
-    const key = generateApiKey()
-    const hash = hashApiKey(key, TEST_SECRET)
-    expect(verifyApiKey(key, hash, 'wrong-secret')).toBe(false)
+    expect(verifyApiKey(wrongKey, hash)).toBe(false)
   })
 
   it('returns false when storedHash is empty', () => {
     const key = generateApiKey()
-    expect(verifyApiKey(key, '', TEST_SECRET)).toBe(false)
-  })
-
-  it('returns false when secret is empty', () => {
-    const key = generateApiKey()
-    const hash = hashApiKey(key, TEST_SECRET)
-    expect(verifyApiKey(key, hash, '')).toBe(false)
+    expect(verifyApiKey(key, '')).toBe(false)
   })
 
   it('is not vulnerable to timing side-channels (uses timingSafeEqual)', () => {
     // Structural test: verify that even a key that differs only in the last
     // character is still rejected.
     const key = 'otk_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    const hash = hashApiKey(key, TEST_SECRET)
+    const hash = hashApiKey(key)
     const almostKey = 'otk_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab'
-    expect(verifyApiKey(almostKey, hash, TEST_SECRET)).toBe(false)
+    expect(verifyApiKey(almostKey, hash)).toBe(false)
   })
 })
