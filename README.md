@@ -112,11 +112,12 @@ Create `app/.env` based on `app/.env.example`:
 
 | Variable | Description |
 |---|---|
-| `AWS_REGION` | AWS region for DynamoDB and Comprehend (e.g. `eu-central-1`) |
 | `AWS_ACCESS_KEY_ID` | IAM access key (needs DynamoDB + Comprehend permissions) |
 | `AWS_SECRET_ACCESS_KEY` | IAM secret key |
 | `API_KEY_HMAC_SECRET` | ≥32 random bytes used to HMAC-sign API keys – **never commit this** |
 
+> **AWS region** is read automatically from `amplify_outputs.json` (`auth.aws_region`).  You do not need to set `AWS_REGION` manually.
+>
 > **DynamoDB table names** are read automatically from `amplify_outputs.json` (`custom.dynamoTableName` and `custom.dynamoAnalysisTableName`).  You no longer need to set `DYNAMO_TABLE_NAME` or `DYNAMO_ANALYSIS_TABLE_NAME` manually.  Each Amplify environment (sandbox, production branch, etc.) gets its own uniquely-named tables, eliminating the risk of accidental cross-environment data access.
 >
 > If you need to override the table names (e.g. when pointing to pre-existing tables without Amplify), set `DYNAMO_TABLE_NAME` and `DYNAMO_ANALYSIS_TABLE_NAME` in `app/.env`.
@@ -338,13 +339,10 @@ Set the following for the Nuxt app runtime:
 - `app/.env` (for local dev).
 
 ```
-AWS_REGION=eu-central-1
 API_KEY_HMAC_SECRET=<strong-random-secret>
 ```
 
-> **DynamoDB table names are set automatically.**  `npx ampx pipeline-deploy` writes the CDK-generated table names into `amplify_outputs.json` under `custom.dynamoTableName` and `custom.dynamoAnalysisTableName`.  The Nuxt app reads this file at build time, so you do **not** need to set `DYNAMO_TABLE_NAME` or `DYNAMO_ANALYSIS_TABLE_NAME`.  Each branch / environment gets its own isolated tables.
->
-> Cognito settings (`user_pool_id`, `user_pool_client_id`, `aws_region`) are read automatically from the same `amplify_outputs.json` file. No manual entry is required.
+> **AWS region, DynamoDB table names, and Cognito settings are all set automatically** from `amplify_outputs.json` written by `npx ampx pipeline-deploy`. No manual entry is required for any of these.
 
 ### 3. IAM permissions for the Nuxt server
 
