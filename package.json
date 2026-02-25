@@ -11,6 +11,7 @@
     "build": "npm run build --workspace=app",
     "aws:policy": "node scripts/aws-iam-helper.mjs --print-policy",
     "aws:ci-check": "node scripts/aws-iam-helper.mjs --ci-check",
+    "aws:verify-role": "node scripts/aws-iam-helper.mjs --verify-role",
     "aws:create-local-user": "node scripts/aws-iam-helper.mjs --create-user --write-env",
     "api:test": "node scripts/send-sample-analysis.mjs",
     "test": "npm run test --workspace=app && npm run test --workspace=amplify",

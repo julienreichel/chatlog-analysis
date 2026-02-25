@@ -7,14 +7,19 @@ import { execFileSync } from 'node:child_process'
 const DEFAULT_USER_NAME = 'chatlog-analysis-local-dev'
 const DEFAULT_POLICY_NAME = 'ChatlogAnalysisLocalDevAccess'
 const DEFAULT_ENV_FILE = 'app/.env'
+const DEFAULT_ROLE_POLICY_NAME = 'ChatlogAnalysisAmplifyRuntimeAccess'
 
 function parseArgs(argv) {
   const options = {
     ciCheck: false,
     printPolicy: false,
+    verifyRole: false,
     createUser: false,
     userName: DEFAULT_USER_NAME,
     policyName: DEFAULT_POLICY_NAME,
+    rolePolicyName: DEFAULT_ROLE_POLICY_NAME,
+    roleArn: process.env.IAM_ROLE_ARN || '',
+    roleName: process.env.IAM_ROLE_NAME || '',
     envFile: DEFAULT_ENV_FILE,
     writeEnv: false,
     profile: process.env.AWS_PROFILE || '',
@@ -26,6 +31,8 @@ function parseArgs(argv) {
       options.ciCheck = true
     else if (arg === '--print-policy')
       options.printPolicy = true
+    else if (arg === '--verify-role')
+      options.verifyRole = true
     else if (arg === '--create-user')
       options.createUser = true
     else if (arg === '--write-env')
@@ -34,6 +41,12 @@ function parseArgs(argv) {
       options.userName = argv[++i] || DEFAULT_USER_NAME
     else if (arg === '--policy-name')
       options.policyName = argv[++i] || DEFAULT_POLICY_NAME
+    else if (arg === '--role-policy-name')
+      options.rolePolicyName = argv[++i] || DEFAULT_ROLE_POLICY_NAME
+    else if (arg === '--role-arn')
+      options.roleArn = argv[++i] || ''
+    else if (arg === '--role-name')
+      options.roleName = argv[++i] || ''
     else if (arg === '--env-file')
       options.envFile = argv[++i] || DEFAULT_ENV_FILE
     else if (arg === '--profile')
@@ -50,15 +63,21 @@ function usage() {
 Usage:
   node scripts/aws-iam-helper.mjs --ci-check
   node scripts/aws-iam-helper.mjs --print-policy
+  node scripts/aws-iam-helper.mjs --verify-role --role-arn <arn>
+  node scripts/aws-iam-helper.mjs --verify-role --role-name <name>
   node scripts/aws-iam-helper.mjs --create-user [--user-name <name>] [--policy-name <name>] [--write-env]
 
 Options:
-  --ci-check        Print policy guidance when AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are missing.
-  --print-policy    Always print the policy JSON.
-  --create-user     Create/update a local IAM user and attach an inline policy for this app.
-  --write-env       Write the generated access key/secret into app/.env (or --env-file).
-  --env-file        Path to env file for --write-env. Default: app/.env
-  --profile         AWS profile to use for AWS CLI calls.
+  --ci-check         Print policy guidance when AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are missing.
+  --print-policy     Always print the policy JSON.
+  --verify-role      Simulate required permissions for an IAM role and print PASS/FAIL checks.
+  --role-arn         Role ARN for --verify-role.
+  --role-name        Role name for --verify-role (resolved to ARN via aws iam get-role).
+  --role-policy-name Inline policy name shown in generated fix commands.
+  --create-user      Create/update a local IAM user and attach an inline policy for this app.
+  --write-env        Write the generated access key/secret into app/.env (or --env-file).
+  --env-file         Path to env file for --write-env. Default: app/.env
+  --profile          AWS profile to use for AWS CLI calls.
 `)
 }
 
@@ -82,7 +101,7 @@ function runAwsJson(args, profile) {
   fullArgs.push('--output', 'json')
   const stdout = execFileSync('aws', fullArgs, {
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
   return JSON.parse(stdout)
 }
@@ -152,6 +171,11 @@ function makePolicy({ region, accountId, tableName, analysisTableName }) {
   }
 }
 
+function roleNameFromArn(roleArn) {
+  const parts = roleArn.split('/')
+  return parts[parts.length - 1] || roleArn
+}
+
 function replaceEnvValue(text, key, value) {
   const line = `${key}=${value}`
   const pattern = new RegExp(`^${key}=.*$`, 'm')
@@ -170,6 +194,18 @@ function writeLocalEnv(envPath, accessKeyId, secretAccessKey, region) {
     updated = replaceEnvValue(updated, 'AWS_REGION', region)
   writeFileSync(absPath, `${updated.trimEnd()}\n`, 'utf-8')
   console.log(`[aws-iam-helper] Wrote credentials to ${envPath}`)
+}
+
+function printFixSteps(policy, roleName, roleArn, rolePolicyName) {
+  console.log('\n[aws-iam-helper] Fix steps (copy/paste):')
+  console.log('1) Save the required policy JSON:')
+  console.log("cat > /tmp/chatlog-analysis-policy.json <<'JSON'")
+  console.log(JSON.stringify(policy, null, 2))
+  console.log('JSON')
+  console.log('\n2) Attach/update inline policy on the Amplify role:')
+  console.log(`aws iam put-role-policy --role-name ${roleName} --policy-name ${rolePolicyName} --policy-document file:///tmp/chatlog-analysis-policy.json`)
+  console.log('\n3) Verify again:')
+  console.log(`node scripts/aws-iam-helper.mjs --verify-role --role-arn ${roleArn}`)
 }
 
 function createOrUpdateLocalUser(options, context, policy) {
@@ -232,6 +268,122 @@ function createOrUpdateLocalUser(options, context, policy) {
     writeLocalEnv(options.envFile, key.AccessKeyId, key.SecretAccessKey, context.region)
 }
 
+function resolveRoleArn(options) {
+  if (options.roleArn)
+    return options.roleArn
+
+  if (!options.roleName)
+    return ''
+
+  try {
+    const role = runAwsJson(['iam', 'get-role', '--role-name', options.roleName], options.profile)
+    return role?.Role?.Arn || ''
+  }
+  catch {
+    return ''
+  }
+}
+
+function requiredChecks(policy) {
+  const checks = []
+
+  const dynamoStatement = policy.Statement.find(s => Array.isArray(s.Action) && s.Action.includes('dynamodb:GetItem'))
+  const comprehendStatement = policy.Statement.find(s => Array.isArray(s.Action) && s.Action.includes('comprehend:DetectSentiment'))
+
+  if (dynamoStatement) {
+    for (const resource of dynamoStatement.Resource) {
+      for (const action of dynamoStatement.Action)
+        checks.push({ action, resource })
+    }
+  }
+
+  if (comprehendStatement) {
+    for (const action of comprehendStatement.Action)
+      checks.push({ action, resource: '*' })
+  }
+
+  return checks
+}
+
+function simulateCheck(roleArn, action, resource, profile) {
+  try {
+    const out = runAwsJson(
+      [
+        'iam',
+        'simulate-principal-policy',
+        '--policy-source-arn',
+        roleArn,
+        '--action-names',
+        action,
+        '--resource-arns',
+        resource,
+      ],
+      profile,
+    )
+
+    const decision = out?.EvaluationResults?.[0]?.EvalDecision || 'implicitDeny'
+    return { ok: decision === 'allowed', decision }
+  }
+  catch (error) {
+    return {
+      ok: false,
+      decision: 'error',
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+function verifyRolePermissions(options, policy) {
+  const roleArn = resolveRoleArn(options)
+  if (!roleArn) {
+    console.error('[aws-iam-helper] Missing role identity. Provide --role-arn <arn> or --role-name <name>.')
+    process.exit(1)
+  }
+
+  const checks = requiredChecks(policy)
+  console.log(`[aws-iam-helper] Verifying ${checks.length} required permissions for role:`)
+  console.log(roleArn)
+
+  let failed = 0
+  let errors = 0
+
+  for (const check of checks) {
+    const result = simulateCheck(roleArn, check.action, check.resource, options.profile)
+    const shortResource = check.resource.length > 100 ? `${check.resource.slice(0, 97)}...` : check.resource
+
+    if (result.ok) {
+      console.log(`[PASS] ${check.action} on ${shortResource}`)
+      continue
+    }
+
+    failed += 1
+    if (result.decision === 'error') {
+      errors += 1
+      console.log(`[ERROR] ${check.action} on ${shortResource}`)
+      if (result.error)
+        console.log(`        ${result.error}`)
+    }
+    else {
+      console.log(`[FAIL] ${check.action} on ${shortResource} (${result.decision})`)
+    }
+  }
+
+  if (errors > 0) {
+    console.log('\n[aws-iam-helper] Verification could not complete due to IAM simulation errors.')
+    console.log('This usually means the caller lacks iam:SimulatePrincipalPolicy permission.')
+    printFixSteps(policy, roleNameFromArn(roleArn), roleArn, options.rolePolicyName)
+    process.exit(2)
+  }
+
+  if (failed > 0) {
+    console.log(`\n[aws-iam-helper] Verification failed: ${failed} check(s) missing.`)
+    printFixSteps(policy, roleNameFromArn(roleArn), roleArn, options.rolePolicyName)
+    process.exit(1)
+  }
+
+  console.log('\n[aws-iam-helper] Verification passed: role has all required permissions.')
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
@@ -239,7 +391,7 @@ function main() {
     return
   }
 
-  const context = resolveContext(options.profile, options.createUser)
+  const context = resolveContext(options.profile, options.createUser || options.verifyRole)
   const policy = makePolicy(context)
 
   const hasStaticKeys = Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
@@ -249,10 +401,15 @@ function main() {
     console.log('[aws-iam-helper] In Amplify Hosting, prefer attaching this policy to the app compute/service role instead of creating a dedicated IAM user.')
     console.log('\n[aws-iam-helper] Required policy:')
     console.log(JSON.stringify(policy, null, 2))
+    console.log('\n[aws-iam-helper] To verify a role automatically, run:')
+    console.log('node scripts/aws-iam-helper.mjs --verify-role --role-arn <ROLE_ARN>')
     return
   }
 
-  if (options.printPolicy || (!options.createUser && !options.ciCheck)) {
+  if (options.verifyRole)
+    verifyRolePermissions(options, policy)
+
+  if (options.printPolicy || (!options.createUser && !options.ciCheck && !options.verifyRole)) {
     console.log(JSON.stringify(policy, null, 2))
     if (context.accountId.startsWith('<')) {
       console.log('\n[aws-iam-helper] Tip: set AWS_ACCOUNT_ID (or configure AWS CLI credentials) to render exact DynamoDB ARNs.')

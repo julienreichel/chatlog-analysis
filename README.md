@@ -311,6 +311,7 @@ Run from the **repo root**:
 | `npm run build` | Build Nuxt frontend |
 | `npm run aws:policy` | Print IAM policy JSON with resolved table ARNs |
 | `npm run aws:ci-check` | In CI, print required IAM policy when static AWS keys are missing |
+| `npm run aws:verify-role -- --role-arn <arn>` | Verify required permissions on a role (PASS/FAIL per action/resource) |
 | `npm run aws:create-local-user` | Create/update local-dev IAM user, attach inline policy, write keys to `app/.env` |
 | `npm run api:test -- --api-key <key>` | Send sample analysis request to `/api/v1/analysis/sentiment` |
 | `npm run test` | Run all tests (app + amplify) |
@@ -358,6 +359,14 @@ npm run aws:policy
 ```
 
 In Amplify CI, the build runs `npm run aws:ci-check`; if `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are not set, it prints the required policy in the deployment logs.
+
+To verify your Amplify service/compute role automatically:
+
+```bash
+npm run aws:verify-role -- --role-arn <ROLE_ARN>
+```
+
+The command runs IAM policy simulation checks and prints explicit `PASS`/`FAIL` lines. If checks fail, it prints copy-paste AWS CLI steps to attach the correct policy and re-run verification.
 
 For local dev key-based flow:
 
