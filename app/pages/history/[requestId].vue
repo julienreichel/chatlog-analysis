@@ -73,6 +73,19 @@
           </template>
         </UCard>
 
+        <!-- LLM check result card -->
+        <UCard v-if="call.type === 'llm' && call.results?.result !== undefined" class="mb-6">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold">LLM Analysis Result</span>
+              <UBadge v-if="call.results?.checkName" color="primary" variant="subtle">
+                {{ call.results.checkName }}
+              </UBadge>
+            </div>
+          </template>
+          <pre class="bg-gray-100 dark:bg-gray-800 rounded p-3 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{{ JSON.stringify(call.results.result, null, 2) }}</pre>
+        </UCard>
+
         <!-- Per-message results -->
         <div class="space-y-3">
           <UCard
@@ -174,7 +187,7 @@ const filteredMessages = computed(() => {
   return allWithIdx.filter(({ msg }) => msg.role === roleFilter.value)
 })
 
-const hasSummary = computed(() => !!call.value?.results?.summary)
+const hasSummary = computed(() => call.value?.type !== 'llm' && !!call.value?.results?.summary)
 
 function msgResult(idx: number) {
   return call.value?.results?.perMessage?.[idx] ?? null

@@ -8,6 +8,7 @@
             <UButton to="/history" variant="ghost" color="neutral">History</UButton>
             <UButton to="/api" variant="ghost" color="neutral">API</UButton>
             <UButton to="/settings/api-keys" variant="ghost" color="neutral">API Keys</UButton>
+            <UButton to="/settings/llm-checks" variant="ghost" color="neutral">LLM Checks</UButton>
             <UButton v-if="isLoggedIn" variant="outline" color="neutral" size="sm" @click="handleLogout">
               Sign out
             </UButton>

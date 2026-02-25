@@ -76,6 +76,11 @@
             />
           </UFormField>
 
+          <!-- LLM Check ID (shown only for llm endpoint) -->
+          <UFormField v-if="tryEndpoint === 'llm'" label="Check ID" required>
+            <UInput v-model="tryCheckId" placeholder="Your LLM check ID (from Settings → LLM Checks)" class="font-mono w-full" />
+          </UFormField>
+
           <!-- Messages JSON -->
           <UFormField label="Messages (JSON array)" required>
             <UTextarea
@@ -94,7 +99,7 @@
           <!-- Error alert -->
           <UAlert v-if="tryError" color="error" :description="tryError" />
 
-          <UButton :loading="trying" :disabled="!tryApiKey || !tryMessages" @click="handleTry">
+          <UButton :loading="trying" :disabled="!tryApiKey || !tryMessages || (tryEndpoint === 'llm' && !tryCheckId)" @click="handleTry">
             Send Request
           </UButton>
         </div>
@@ -128,7 +133,7 @@ definePageMeta({ middleware: 'auth' })
 
 // ─── Endpoint definitions ─────────────────────────────────────────────────────
 
-type EndpointType = 'sentiment' | 'toxicity'
+type EndpointType = 'sentiment' | 'toxicity' | 'llm'
 
 interface EndpointField {
   name: string
@@ -169,6 +174,18 @@ const endpoints: EndpointDef[] = [
       { name: 'tags', required: false, description: 'Array of string tags for filtering in history.' },
     ],
   },
+  {
+    type: 'llm',
+    path: '/api/v1/analysis/llm/:checkId',
+    description: 'Runs a custom LLM check against a conversation using Amazon Bedrock (Nova Lite). The check prompt is configured in Settings → LLM Checks. The LLM must return valid JSON; otherwise the call fails.',
+    fields: [
+      { name: 'messages', required: true, description: 'Array of { role, content, timestamp? } objects.' },
+      { name: 'conversationId', required: false, description: 'Client-supplied identifier for the conversation.' },
+      { name: 'model', required: false, description: 'Name of the LLM model used to generate messages.' },
+      { name: 'channel', required: false, description: 'Channel name (e.g. "chat", "email").' },
+      { name: 'tags', required: false, description: 'Array of string tags for filtering in history.' },
+    ],
+  },
 ]
 
 const endpointOptions = endpoints.map(e => ({ label: e.path, value: e.type }))
@@ -189,7 +206,8 @@ const SAMPLE_PAYLOAD = JSON.stringify(
 const defaultApiBaseUrl = useRequestURL().origin
 
 function buildCurl(type: EndpointType, baseUrl = defaultApiBaseUrl, apiKey = '<YOUR_API_KEY>'): string {
-  return `curl -X POST ${baseUrl}/api/v1/analysis/${type} \\
+  const path = type === 'llm' ? '/api/v1/analysis/llm/<CHECK_ID>' : `/api/v1/analysis/${type}`
+  return `curl -X POST ${baseUrl}${path} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: ${apiKey}" \\
   -d '${SAMPLE_PAYLOAD.replace(/'/g, "'\\''")}'`
@@ -207,6 +225,7 @@ async function copyCurl(type: EndpointType) {
 
 const tryApiKey = ref('')
 const tryEndpoint = ref<EndpointType>('sentiment')
+const tryCheckId = ref('')
 const tryMessages = ref('')
 const tryConversationId = ref('')
 const trying = ref(false)
@@ -240,7 +259,11 @@ async function handleTry() {
     const body: Record<string, unknown> = { messages }
     if (tryConversationId.value) body.conversationId = tryConversationId.value
 
-    const res = await fetch(`/api/v1/analysis/${tryEndpoint.value}`, {
+    const apiPath = tryEndpoint.value === 'llm'
+      ? `/api/v1/analysis/llm/${tryCheckId.value}`
+      : `/api/v1/analysis/${tryEndpoint.value}`
+
+    const res = await fetch(apiPath, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

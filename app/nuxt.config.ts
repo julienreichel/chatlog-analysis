@@ -62,7 +62,7 @@ export default defineNuxtConfig({
   nitro: {
     // Ensure server-only packages don't leak to client
     externals: {
-      inline: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb', '@aws-sdk/client-comprehend', 'tslib'],
+      inline: ['@aws-sdk/client-dynamodb', '@aws-sdk/lib-dynamodb', '@aws-sdk/client-comprehend', '@aws-sdk/client-bedrock-runtime', 'tslib'],
     },
   },
 })

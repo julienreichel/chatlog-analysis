@@ -28,6 +28,7 @@ import {
   PutCommand,
   QueryCommand,
   UpdateCommand,
+  DeleteCommand,
 } from '@aws-sdk/lib-dynamodb'
 import { randomUUID } from 'node:crypto'
 
@@ -243,7 +244,7 @@ export interface DiscussionMetadata {
   tags?: string[]
 }
 
-export type AnalysisType = 'sentiment' | 'toxicity'
+export type AnalysisType = 'sentiment' | 'toxicity' | 'llm'
 
 export interface AnalysisCallRecord {
   userId: string
@@ -394,4 +395,189 @@ export async function getAnalysisCallById(
     metadata: item.metadata as DiscussionMetadata | undefined,
     results: item.results as Record<string, unknown>,
   }
+}
+
+// ─── LLM Check Types ──────────────────────────────────────────────────────────
+
+export interface LlmCheckRecord {
+  userId: string
+  checkId: string
+  name: string
+  prompt: string
+  outputSchema?: string
+  createdAt: string
+}
+
+// ─── LLM Check Persistence ────────────────────────────────────────────────────
+//
+// Stored in the API Keys table (same single-table) with different SK prefix:
+//   pk = "USER#<userId>"
+//   sk = "CHECK#<checkId>"
+
+function checkSk(checkId: string) {
+  return `CHECK#${checkId}`
+}
+
+/**
+ * Persist a new LLM check configuration for a user.
+ */
+export async function createLlmCheck(
+  userId: string,
+  name: string,
+  prompt: string,
+  tableName: string,
+  region: string,
+  outputSchema?: string,
+): Promise<LlmCheckRecord> {
+  const client = getDocClient(region)
+  const checkId = randomUUID()
+  const createdAt = new Date().toISOString()
+
+  const record: LlmCheckRecord = {
+    userId,
+    checkId,
+    name,
+    prompt,
+    createdAt,
+    ...(outputSchema ? { outputSchema } : {}),
+  }
+
+  await client.send(new PutCommand({
+    TableName: tableName,
+    Item: {
+      pk: pk(userId),
+      sk: checkSk(checkId),
+      checkId,
+      userId,
+      name,
+      prompt,
+      createdAt,
+      ...(outputSchema ? { outputSchema } : {}),
+    },
+    ConditionExpression: 'attribute_not_exists(pk)',
+  }))
+
+  return record
+}
+
+/**
+ * Return all LLM check configurations for a user.
+ */
+export async function listLlmChecks(
+  userId: string,
+  tableName: string,
+  region: string,
+): Promise<LlmCheckRecord[]> {
+  const client = getDocClient(region)
+
+  const result = await client.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'pk = :pk AND begins_with(sk, :skPrefix)',
+    ExpressionAttributeValues: {
+      ':pk': pk(userId),
+      ':skPrefix': 'CHECK#',
+    },
+  }))
+
+  return (result.Items ?? []).map(item => ({
+    userId: item.userId as string,
+    checkId: item.checkId as string,
+    name: item.name as string,
+    prompt: item.prompt as string,
+    outputSchema: item.outputSchema as string | undefined,
+    createdAt: item.createdAt as string,
+  }))
+}
+
+/**
+ * Retrieve a single LLM check by checkId for a user.
+ */
+export async function getLlmCheck(
+  userId: string,
+  checkId: string,
+  tableName: string,
+  region: string,
+): Promise<LlmCheckRecord | null> {
+  const client = getDocClient(region)
+
+  const result = await client.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: 'pk = :pk AND sk = :sk',
+    ExpressionAttributeValues: {
+      ':pk': pk(userId),
+      ':sk': checkSk(checkId),
+    },
+    Limit: 1,
+  }))
+
+  if (!result.Items || result.Items.length === 0) return null
+
+  const item = result.Items[0]!
+  return {
+    userId: item.userId as string,
+    checkId: item.checkId as string,
+    name: item.name as string,
+    prompt: item.prompt as string,
+    outputSchema: item.outputSchema as string | undefined,
+    createdAt: item.createdAt as string,
+  }
+}
+
+/**
+ * Look up an LLM check by checkId only (for use in X-API-Key protected endpoints
+ * where we only have the checkId, not the userId from Cognito).
+ * Scans using the check's userId stored in the item.
+ * Uses a GSI scan via checkId - falls back to query if CheckIdIndex exists.
+ *
+ * NOTE: Since we don't have a GSI on checkId for checks, we store userId in the
+ * item so we can reconstruct the pk and do a direct Get after resolving userId.
+ * For simplicity, this endpoint uses a Scan with a filter expression.
+ * In production, add a GSI on checkId.
+ */
+export async function getLlmCheckById(
+  checkId: string,
+  tableName: string,
+  region: string,
+): Promise<LlmCheckRecord | null> {
+  const client = getDocClient(region)
+
+  // Use QueryCommand on CheckIdIndex GSI if available, otherwise fall back to scan
+  // For now use the same pattern as getAnalysisCallById with a dedicated GSI
+  const result = await client.send(new QueryCommand({
+    TableName: tableName,
+    IndexName: 'CheckIdIndex',
+    KeyConditionExpression: 'checkId = :checkId',
+    ExpressionAttributeValues: { ':checkId': checkId },
+    Limit: 1,
+  }))
+
+  if (!result.Items || result.Items.length === 0) return null
+
+  const item = result.Items[0]!
+  return {
+    userId: item.userId as string,
+    checkId: item.checkId as string,
+    name: item.name as string,
+    prompt: item.prompt as string,
+    outputSchema: item.outputSchema as string | undefined,
+    createdAt: item.createdAt as string,
+  }
+}
+
+/**
+ * Delete an LLM check configuration.
+ */
+export async function deleteLlmCheck(
+  userId: string,
+  checkId: string,
+  tableName: string,
+  region: string,
+): Promise<void> {
+  const client = getDocClient(region)
+
+  await client.send(new DeleteCommand({
+    TableName: tableName,
+    Key: { pk: pk(userId), sk: checkSk(checkId) },
+    ConditionExpression: 'attribute_exists(pk)',
+  }))
 }

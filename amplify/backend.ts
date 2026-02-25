@@ -46,6 +46,12 @@ apiKeysTable.addGlobalSecondaryIndex({
   projectionType: ProjectionType.ALL,
 })
 
+apiKeysTable.addGlobalSecondaryIndex({
+  indexName: 'CheckIdIndex',
+  partitionKey: { name: 'checkId', type: AttributeType.STRING },
+  projectionType: ProjectionType.ALL,
+})
+
 /**
  * Analysis Requests table
  *
@@ -90,7 +96,7 @@ backend.addOutput({
   },
 })
 
-// ─── IAM: grant apiFunction Lambda access to Amazon Comprehend ───────────────
+// ─── IAM: grant apiFunction Lambda access to Amazon Comprehend and Bedrock ───
 
 lambdaRole.addToPrincipalPolicy(
   new PolicyStatement({
@@ -98,6 +104,16 @@ lambdaRole.addToPrincipalPolicy(
     actions: [
       'comprehend:DetectSentiment',
       'comprehend:DetectToxicContent',
+    ],
+    resources: ['*'],
+  }),
+)
+
+lambdaRole.addToPrincipalPolicy(
+  new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions: [
+      'bedrock:InvokeModel',
     ],
     resources: ['*'],
   }),
