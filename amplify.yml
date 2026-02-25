@@ -15,7 +15,7 @@ frontend:
       commands:
         - npm run build --workspace=app
   artifacts:
-    baseDirectory: app/.output/public
+    baseDirectory: app/.amplify-hosting
     files:
       - "**/*"
   cache:
