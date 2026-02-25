@@ -8,10 +8,12 @@ This platform lets users:
 
 1. **Sign in** with their email via Amazon Cognito.
 2. **Generate API keys** from the dashboard and use them to call the analysis REST endpoints.
-3. **Analyse LLM conversations** – every message in a discussion is run through Amazon Comprehend:
-   - `POST /api/v1/analysis/sentiment` → per-message sentiment + aggregated summary
-   - `POST /api/v1/analysis/toxicity` → per-message toxicity scores + aggregated summary
-4. **Browse history** – every call is persisted to DynamoDB; users can review all past calls and their results from the dashboard.
+3. **Analyse LLM conversations** – every message in a discussion can be analysed using:
+   - `POST /api/v1/analysis/sentiment` → per-message sentiment + aggregated summary (Amazon Comprehend)
+   - `POST /api/v1/analysis/toxicity` → per-message toxicity scores + aggregated summary (Amazon Comprehend)
+   - `POST /api/v1/analysis/llm/:checkId` → custom LLM analysis via a user-defined prompt (Amazon Bedrock Nova Lite)
+4. **Configure LLM checks** – create named checks with a system prompt and optional output schema; each check gets a unique endpoint URI.
+5. **Browse history** – every call is persisted to DynamoDB; users can review all past calls and their results from the dashboard.
 
 ## Repository Structure
 
@@ -25,17 +27,19 @@ chatlog-analysis/
 │   │   │   ├── index.vue        # Analysis call history table
 │   │   │   └── [requestId].vue  # Per-call detail with per-message results
 │   │   └── settings/
-│   │       └── api-keys.vue     # Generate / revoke API keys
+│   │       ├── api-keys.vue     # Generate / revoke API keys
+│   │       └── llm-checks.vue   # Create / delete LLM checks, copy endpoint URI, test inline
 │   ├── server/
 │   │   ├── api/v1/
-│   │   │   ├── analysis/        # Sentiment & toxicity REST endpoints (X-API-Key)
+│   │   │   ├── analysis/        # Sentiment, toxicity & LLM REST endpoints (X-API-Key)
 │   │   │   ├── auth/api-keys/   # API key CRUD (Cognito JWT)
-│   │   │   └── internal/history/# History endpoints for the dashboard (Cognito JWT)
+│   │   │   └── internal/        # History & LLM check management endpoints (Cognito JWT)
 │   │   ├── middleware/
 │   │   │   └── api-key-auth.ts  # X-API-Key validation middleware
 │   │   └── utils/
 │   │       ├── cognito-auth.ts  # Cognito JWT verification helper
 │   │       ├── comprehendClient.ts # AWS Comprehend wrappers
+│   │       ├── bedrockClient.ts # AWS Bedrock Nova Lite wrapper
 │   │       ├── dynamodb.ts      # DynamoDB data-access layer
 │   │       └── key-utils.ts     # API key generation & SHA-256 hashing
 │   ├── composables/             # useAuth, useApiKeys, useHistory
@@ -55,16 +59,20 @@ Browser (Nuxt SPA)
   │
   ▼
 Nuxt Server (API routes)
-  ├─ POST /api/v1/analysis/sentiment  ──► Amazon Comprehend DetectSentiment
-  ├─ POST /api/v1/analysis/toxicity   ──► Amazon Comprehend DetectToxicContent
-  ├─ GET  /api/v1/analysis/calls      ──► DynamoDB (AnalysisRequests table)
-  ├─ GET  /api/v1/auth/api-keys       ──► DynamoDB (ApiKeys table)
-  ├─ POST /api/v1/auth/api-keys       ──► DynamoDB (ApiKeys table)
-  └─ POST /api/v1/auth/api-keys/:id/revoke
+  ├─ POST /api/v1/analysis/sentiment        ──► Amazon Comprehend DetectSentiment
+  ├─ POST /api/v1/analysis/toxicity         ──► Amazon Comprehend DetectToxicContent
+  ├─ POST /api/v1/analysis/llm/:checkId     ──► Amazon Bedrock (amazon.nova-lite-v1:0)
+  ├─ GET  /api/v1/analysis/calls            ──► DynamoDB (AnalysisRequests table)
+  ├─ GET  /api/v1/auth/api-keys             ──► DynamoDB (ApiKeys table)
+  ├─ POST /api/v1/auth/api-keys             ──► DynamoDB (ApiKeys table)
+  ├─ POST /api/v1/auth/api-keys/:id/revoke
+  ├─ GET  /api/v1/internal/llm-checks       ──► DynamoDB (ApiKeys table, CHECK# items)
+  ├─ POST /api/v1/internal/llm-checks       ──► DynamoDB (ApiKeys table, CHECK# items)
+  └─ DELETE /api/v1/internal/llm-checks/:id ──► DynamoDB (ApiKeys table, CHECK# items)
 
 AWS Amplify Gen 2 (infrastructure)
   ├─ Cognito User Pool  (email / password)
-  ├─ DynamoDB: amplify-<app>-<env>-...-ApiKeysTable...          (API key records)
+  ├─ DynamoDB: amplify-<app>-<env>-...-ApiKeysTable...          (API key + LLM check records)
   └─ DynamoDB: amplify-<app>-<env>-...-AnalysisRequestsTable... (analysis call records)
 ```
 
@@ -76,6 +84,7 @@ AWS Amplify Gen 2 (infrastructure)
 | `GET /api/v1/analysis/calls*` | `X-API-Key` header | Same |
 | `GET/POST /api/v1/auth/api-keys*` | `Authorization: Bearer <jwt>` | Cognito ID Token |
 | `GET /api/v1/internal/history*` | `Authorization: Bearer <jwt>` | Cognito ID Token |
+| `GET/POST/DELETE /api/v1/internal/llm-checks*` | `Authorization: Bearer <jwt>` | Cognito ID Token |
 
 ## Local Development
 
@@ -83,7 +92,7 @@ AWS Amplify Gen 2 (infrastructure)
 
 - Node.js 20+
 - npm 10+
-- AWS CLI configured (credentials with DynamoDB + Comprehend access)
+- AWS CLI configured (credentials with DynamoDB + Comprehend + Bedrock access)
 - An Amazon Cognito User Pool (provisioned via `npx ampx sandbox` or deployment – see [Deploy](#deploy))
 
 ### Backend (`amplify/`)
@@ -137,7 +146,7 @@ All analysis endpoints accept and return `application/json`.
 
 ### Analysis endpoints
 
-Both endpoints are protected with an `X-API-Key` header containing a valid, non-revoked API key.
+All endpoints are protected with an `X-API-Key` header containing a valid, non-revoked API key.
 
 #### `POST /api/v1/analysis/sentiment`
 
@@ -228,6 +237,51 @@ Runs Amazon Comprehend `DetectToxicContent` on every message (batched in groups 
 }
 ```
 
+#### `POST /api/v1/analysis/llm/:checkId`
+
+Invokes a user-defined LLM check against a conversation using Amazon Bedrock (`amazon.nova-lite-v1:0`). The `checkId` is obtained from the dashboard (Settings → LLM Checks) or via `GET /api/v1/internal/llm-checks`. **The model must return valid JSON** or the call fails with HTTP 422.
+
+**Request body** – same shape as sentiment/toxicity (no `languageCode` field).
+
+**Response**
+
+```json
+{
+  "requestId": "uuid",
+  "callId": "uuid",
+  "endpointType": "llm",
+  "createdAt": "2025-01-01T10:00:00.000Z",
+  "durationMs": 1240,
+  "checkId": "uuid",
+  "checkName": "Compliance Check",
+  "result": {
+    "compliant": true,
+    "issues": [],
+    "score": 95
+  }
+}
+```
+
+### LLM check management (requires Cognito JWT)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/internal/llm-checks` | List all LLM checks for the signed-in user |
+| `POST` | `/api/v1/internal/llm-checks` | Create a new LLM check |
+| `DELETE` | `/api/v1/internal/llm-checks/:checkId` | Delete a check |
+
+#### Create LLM check request body
+
+```json
+{
+  "name": "Compliance Check",
+  "prompt": "Analyse this conversation and return a JSON object with: compliant (boolean), issues (string[]), score (number 0-100).",
+  "outputSchema": "{ \"compliant\": boolean, \"issues\": string[], \"score\": number }"
+}
+```
+
+> **`outputSchema`** is optional but recommended – it is appended to the system prompt to guide the model's output structure.
+
 ### API key management (requires Cognito JWT)
 
 | Method | Path | Description |
@@ -267,7 +321,9 @@ Runs Amazon Comprehend `DetectToxicContent` on every message (batched in groups 
 
 ### ApiKeysTable
 
-Single-table design with one item type.  The physical table name is auto-generated by CDK under an Amplify-prefixed name (e.g. `amplify-chatloganalysismonorepo-julienreichel-sandbox-...-ApiKeysTable...`) and published to `amplify_outputs.json` under `custom.dynamoTableName`.
+Single-table design with **two item types** stored under different sort-key prefixes.  The physical table name is auto-generated by CDK under an Amplify-prefixed name (e.g. `amplify-chatloganalysismonorepo-julienreichel-sandbox-...-ApiKeysTable...`) and published to `amplify_outputs.json` under `custom.dynamoTableName`.
+
+#### API Key items (`sk = "KEY#<keyId>"`)
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -280,7 +336,22 @@ Single-table design with one item type.  The physical table name is auto-generat
 | `revokedAt` | String | ISO-8601 timestamp, present only when revoked |
 | `lastUsedAt` | String | ISO-8601 timestamp of last successful authentication |
 
-**GSI – `KeyHashIndex`**: `keyHash` (partition key) – used for O(1) key validation without table scans.
+#### LLM Check items (`sk = "CHECK#<checkId>"`)
+
+| Attribute | Type | Description |
+|---|---|---|
+| `pk` | String | `"USER#<userId>"` |
+| `sk` | String | `"CHECK#<checkId>"` |
+| `checkId` | String | UUID |
+| `userId` | String | Cognito `sub` |
+| `name` | String | Human-readable name for the check |
+| `prompt` | String | System prompt sent to the LLM |
+| `outputSchema` | String | Optional description of the expected JSON output structure |
+| `createdAt` | String | ISO-8601 timestamp |
+
+**GSIs:**
+- **`KeyHashIndex`**: `keyHash` (partition key) – O(1) key validation without table scans.
+- **`CheckIdIndex`**: `checkId` (partition key) – O(1) check lookup by ID from the analysis endpoint.
 
 ### AnalysisRequestsTable
 
@@ -293,9 +364,9 @@ The physical table name is auto-generated by CDK under an Amplify-prefixed name 
 | `callId` | String | UUID |
 | `userId` | String | Cognito `sub` |
 | `createdAt` | String | ISO-8601 timestamp |
-| `type` | String | `"sentiment"` or `"toxicity"` |
+| `type` | String | `"sentiment"`, `"toxicity"`, or `"llm"` |
 | `messages` | List | Array of `{ role, content, timestamp? }` objects |
-| `results` | Map | Full Comprehend results |
+| `results` | Map | Full analysis results (Comprehend output or LLM JSON result) |
 | `conversationId` | String | Optional caller-supplied conversation identifier |
 | `metadata` | Map | Optional `{ model?, channel?, tags? }` |
 
@@ -333,7 +404,7 @@ npx ampx pipeline-deploy --branch main --app-id <YOUR_APP_ID>
 This creates:
 - Cognito User Pool + App Client
 - Two DynamoDB tables (names are auto-generated per environment) with their GSIs:
-  - `ApiKeysTable` (with `KeyHashIndex` GSI)
+  - `ApiKeysTable` (with `KeyHashIndex` and `CheckIdIndex` GSIs)
   - `AnalysisRequestsTable` (with `CallIdIndex` GSI)
 - Lambda health-check function
 - `amplify_outputs.json` containing all resource names (including table names)
@@ -352,7 +423,7 @@ Set the following for the Nuxt app runtime:
 
 ### 3. IAM permissions for the Nuxt server
 
-The Nuxt server process needs DynamoDB + Comprehend permissions. You can now generate the exact policy from the current environment (including real table names from `amplify_outputs.json`):
+The Nuxt server process needs DynamoDB + Comprehend + Bedrock permissions. You can now generate the exact policy from the current environment (including real table names from `amplify_outputs.json`):
 
 ```bash
 npm run aws:policy
@@ -378,8 +449,10 @@ This creates/updates an IAM user, attaches an inline policy scoped to:
 - `custom.dynamoTableName`
 - `custom.dynamoAnalysisTableName`
 - their secondary indexes (`/index/*`)
+- `dynamodb:DeleteItem` (for LLM check deletion)
 - `comprehend:DetectSentiment`
 - `comprehend:DetectToxicContent`
+- `bedrock:InvokeModel` (for LLM analysis endpoint)
 
 ### 4. Deploy the Nuxt app
 
@@ -412,6 +485,14 @@ npm run api:test -- --api-key <YOUR_API_KEY> --base-url https://<your-domain>
 ```bash
 npm run api:test -- --api-key <YOUR_API_KEY> --type toxicity
 ```
+
+### LLM endpoint
+
+```bash
+npm run api:test -- --api-key <YOUR_API_KEY> --type llm --check-id <CHECK_ID>
+```
+
+> The `checkId` is the UUID shown in Settings → LLM Checks after creating a check.  You can also set it via the `LLM_CHECK_ID` environment variable.
 
 ### Custom payload
 
