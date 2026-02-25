@@ -10,11 +10,15 @@
  *   messages: Array<{ role: string, content: string, timestamp?: string }>
  *   model?, channel?, tags?
  *
+ * Note: Amazon Comprehend DetectToxicContent only supports English ('en').
+ * The language code is therefore hardcoded and not accepted as a request parameter.
+ *
  * Response: { requestId, callId, endpointType, createdAt, durationMs,
  *             conversationId?, messages: [...], summary: {...} }
  */
 import { createAnalysisCall, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
 import { detectToxicContentBatch } from '~/server/utils/comprehendClient'
+import type { LanguageCode } from '@aws-sdk/client-comprehend'
 
 // Maximum number of text segments accepted by DetectToxicContent in a single call.
 const COMPREHEND_TOXICITY_BATCH_SIZE = 10
@@ -44,6 +48,8 @@ export default defineEventHandler(async (event) => {
   })
 
   const conversationId: string | undefined = typeof body.conversationId === 'string' ? body.conversationId : undefined
+  // DetectToxicContent only supports English; language code is hardcoded accordingly.
+  const languageCode: LanguageCode = 'en'
   const metadata: DiscussionMetadata | undefined = (body.model || body.channel || body.tags)
     ? {
         ...(typeof body.model === 'string' ? { model: body.model } : {}),
@@ -63,7 +69,7 @@ export default defineEventHandler(async (event) => {
       batches.push(messages.slice(i, i + COMPREHEND_TOXICITY_BATCH_SIZE).map(m => m.content))
     }
     const batchResults = await Promise.all(
-      batches.map(batch => detectToxicContentBatch(batch, config.awsRegion)),
+      batches.map(batch => detectToxicContentBatch(batch, config.awsRegion, languageCode)),
     )
     toxicityResults = batchResults.flat()
   }
