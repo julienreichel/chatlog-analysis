@@ -150,6 +150,7 @@ function makePolicy({ region, accountId, tableName, analysisTableName }) {
           'dynamodb:GetItem',
           'dynamodb:PutItem',
           'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
           'dynamodb:Query',
         ],
         Resource: [
@@ -164,6 +165,13 @@ function makePolicy({ region, accountId, tableName, analysisTableName }) {
         Action: [
           'comprehend:DetectSentiment',
           'comprehend:DetectToxicContent',
+        ],
+        Resource: '*',
+      },
+      {
+        Effect: 'Allow',
+        Action: [
+          'bedrock:InvokeModel',
         ],
         Resource: '*',
       },
@@ -289,6 +297,7 @@ function requiredChecks(policy) {
 
   const dynamoStatement = policy.Statement.find(s => Array.isArray(s.Action) && s.Action.includes('dynamodb:GetItem'))
   const comprehendStatement = policy.Statement.find(s => Array.isArray(s.Action) && s.Action.includes('comprehend:DetectSentiment'))
+  const bedrockStatement = policy.Statement.find(s => Array.isArray(s.Action) && s.Action.includes('bedrock:InvokeModel'))
 
   if (dynamoStatement) {
     for (const resource of dynamoStatement.Resource) {
@@ -299,6 +308,11 @@ function requiredChecks(policy) {
 
   if (comprehendStatement) {
     for (const action of comprehendStatement.Action)
+      checks.push({ action, resource: '*' })
+  }
+
+  if (bedrockStatement) {
+    for (const action of bedrockStatement.Action)
       checks.push({ action, resource: '*' })
   }
 
