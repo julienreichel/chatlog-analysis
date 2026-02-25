@@ -186,7 +186,9 @@ const SAMPLE_PAYLOAD = JSON.stringify(
   2,
 )
 
-function buildCurl(type: EndpointType, baseUrl = '<BASE_URL>', apiKey = '<YOUR_API_KEY>'): string {
+const defaultApiBaseUrl = useRequestURL().origin
+
+function buildCurl(type: EndpointType, baseUrl = defaultApiBaseUrl, apiKey = '<YOUR_API_KEY>'): string {
   return `curl -X POST ${baseUrl}/api/v1/analysis/${type} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: ${apiKey}" \\
