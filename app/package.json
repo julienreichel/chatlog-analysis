@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aws-amplify/ui-vue": "^4.4.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.997.0",
     "@aws-sdk/client-comprehend": "^3.995.0",
     "@aws-sdk/client-dynamodb": "^3.995.0",
     "@aws-sdk/lib-dynamodb": "^3.995.0",
