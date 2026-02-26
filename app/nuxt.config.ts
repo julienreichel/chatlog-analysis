@@ -17,9 +17,12 @@ if (existsSync(amplifyOutputsPath)) {
 }
 
 const DEFAULT_AWS_REGION = 'eu-central-1'
+const DEFAULT_BEDROCK_MODEL_ID = 'amazon.nova-lite-v1:0'
 
 const dynamoTableName = amplifyOutputs?.custom?.dynamoTableName || process.env.DYNAMO_TABLE_NAME || ''
 const dynamoAnalysisTableName = amplifyOutputs?.custom?.dynamoAnalysisTableName || process.env.DYNAMO_ANALYSIS_TABLE_NAME || ''
+const bedrockModelId = process.env.BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL_ID
+const bedrockInferenceProfileId = process.env.BEDROCK_INFERENCE_PROFILE_ID || ''
 
 if (!dynamoTableName || !dynamoAnalysisTableName) {
   console.warn(
@@ -42,6 +45,8 @@ export default defineNuxtConfig({
     dynamoTableName,
     dynamoAnalysisTableName,
     awsRegion: amplifyOutputs?.auth?.aws_region || DEFAULT_AWS_REGION,
+    bedrockModelId,
+    bedrockInferenceProfileId,
 
     // Public keys (exposed to browser via useRuntimeConfig().public)
     public: {

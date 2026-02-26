@@ -13,6 +13,29 @@ import {
 
 export const BEDROCK_MODEL_ID = 'amazon.nova-lite-v1:0'
 
+function isOnDemandUnsupportedError(code?: string, details?: string): boolean {
+  if (code !== 'ValidationException' || !details) return false
+  return details.includes('on-demand throughput') && details.includes('inference profile')
+}
+
+function fallbackInferenceProfileId(region: string): string | undefined {
+  const family = region.split('-')[0]
+  if (!family) return undefined
+  return `${family}.${BEDROCK_MODEL_ID}`
+}
+
+export class BedrockInvokeError extends Error {
+  code?: string
+  details?: string
+
+  constructor(message: string, code?: string, details?: string) {
+    super(message)
+    this.name = 'BedrockInvokeError'
+    this.code = code
+    this.details = details
+  }
+}
+
 // ─── Client (lazy singleton) ──────────────────────────────────────────────────
 
 let _client: BedrockRuntimeClient | null = null
@@ -38,6 +61,8 @@ export async function invokeNovaLite(
   systemPrompt: string,
   conversation: string,
   region: string,
+  overrideModelId?: string,
+  inferenceProfileId?: string,
 ): Promise<string> {
   const client = getClient(region)
 
@@ -55,14 +80,46 @@ export async function invokeNovaLite(
     },
   }
 
-  const command = new InvokeModelCommand({
-    modelId: BEDROCK_MODEL_ID,
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify(requestBody),
-  })
+  const attempt = async (modelId: string) => {
+    const command = new InvokeModelCommand({
+      modelId,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify(requestBody),
+    })
+    return await client.send(command)
+  }
 
-  const response = await client.send(command)
+  const primaryModelId = inferenceProfileId || overrideModelId || BEDROCK_MODEL_ID
+  let response
+  try {
+    response = await attempt(primaryModelId)
+  }
+  catch (err: unknown) {
+    const upstream = err as { name?: string, message?: string }
+    const code = typeof upstream?.name === 'string' ? upstream.name : undefined
+    const details = typeof upstream?.message === 'string' ? upstream.message : undefined
+    if (!inferenceProfileId && isOnDemandUnsupportedError(code, details)) {
+      const fallbackId = fallbackInferenceProfileId(region)
+      if (fallbackId && fallbackId !== primaryModelId) {
+        try {
+          response = await attempt(fallbackId)
+        }
+        catch (fallbackErr: unknown) {
+          const fallbackUpstream = fallbackErr as { name?: string, message?: string }
+          const fallbackCode = typeof fallbackUpstream?.name === 'string' ? fallbackUpstream.name : undefined
+          const fallbackDetails = typeof fallbackUpstream?.message === 'string' ? fallbackUpstream.message : undefined
+          throw new BedrockInvokeError('Bedrock InvokeModel request failed', fallbackCode, fallbackDetails)
+        }
+      }
+      else {
+        throw new BedrockInvokeError('Bedrock InvokeModel request failed', code, details)
+      }
+    }
+    else {
+      throw new BedrockInvokeError('Bedrock InvokeModel request failed', code, details)
+    }
+  }
 
   const responseBody = JSON.parse(new TextDecoder().decode(response.body))
   // Nova Lite response structure: { output: { message: { content: [{ text: '...' }] } } }

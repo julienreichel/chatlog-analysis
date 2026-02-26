@@ -14,7 +14,25 @@
  *             conversationId?, checkId, checkName, result: <parsed JSON> }
  */
 import { createAnalysisCall, getLlmCheckById, MAX_PAYLOAD_BYTES, type DiscussionMessage, type DiscussionMetadata } from '~/server/utils/dynamodb'
-import { invokeNovaLite } from '~/server/utils/bedrockClient'
+import { BedrockInvokeError, invokeNovaLite } from '~/server/utils/bedrockClient'
+
+function mapBedrockError(err: BedrockInvokeError): { statusCode: number, message: string } {
+  switch (err.code) {
+    case 'AccessDeniedException':
+      return { statusCode: 503, message: 'Bedrock access denied for configured AWS credentials' }
+    case 'UnrecognizedClientException':
+    case 'CredentialsProviderError':
+      return { statusCode: 503, message: 'AWS credentials are missing or invalid for Bedrock' }
+    case 'ValidationException':
+    case 'ResourceNotFoundException':
+      return { statusCode: 500, message: 'Bedrock model configuration is invalid for this region' }
+    case 'ThrottlingException':
+    case 'ServiceUnavailableException':
+      return { statusCode: 503, message: 'Bedrock is temporarily unavailable' }
+    default:
+      return { statusCode: 502, message: 'Upstream LLM service error' }
+  }
+}
 
 export default defineEventHandler(async (event) => {
   const startMs = Date.now()
@@ -76,10 +94,34 @@ export default defineEventHandler(async (event) => {
   // Call Bedrock
   let rawResponse: string
   try {
-    rawResponse = await invokeNovaLite(systemPrompt, conversationText, config.awsRegion)
+    rawResponse = await invokeNovaLite(
+      systemPrompt,
+      conversationText,
+      config.awsRegion,
+      config.bedrockModelId,
+      config.bedrockInferenceProfileId,
+    )
   }
   catch (err) {
-    console.error('[llm] Bedrock error', { userId, checkId, messageCount: messages.length, err })
+    if (err instanceof BedrockInvokeError) {
+      const mapped = mapBedrockError(err)
+      console.error('[llm] Bedrock error', {
+        userId,
+        checkId,
+        messageCount: messages.length,
+        upstreamCode: err.code,
+        upstreamMessage: err.details,
+      })
+      throw createError({
+        statusCode: mapped.statusCode,
+        message: mapped.message,
+        data: {
+          upstreamCode: err.code,
+          upstreamMessage: err.details,
+        },
+      })
+    }
+    console.error('[llm] Unexpected LLM error', { userId, checkId, messageCount: messages.length, err })
     throw createError({ statusCode: 502, message: 'Upstream LLM service error' })
   }
 

@@ -123,12 +123,16 @@ Create `app/.env` based on `app/.env.example`:
 |---|---|
 | `AWS_ACCESS_KEY_ID` | Optional. IAM access key for local dev / non-role runtime. |
 | `AWS_SECRET_ACCESS_KEY` | Optional. IAM secret key for local dev / non-role runtime. |
+| `BEDROCK_MODEL_ID` | Optional. Bedrock model ID override (default: `amazon.nova-lite-v1:0`). |
+| `BEDROCK_INFERENCE_PROFILE_ID` | Optional. Inference profile ID/ARN for Bedrock invoke (recommended in `eu-central-1` for Nova Lite). |
 
 > **AWS region** is read automatically from `amplify_outputs.json` (`auth.aws_region`).  You do not need to set `AWS_REGION` manually.
 >
 > **DynamoDB table names** are read automatically from `amplify_outputs.json` (`custom.dynamoTableName` and `custom.dynamoAnalysisTableName`).  You no longer need to set `DYNAMO_TABLE_NAME` or `DYNAMO_ANALYSIS_TABLE_NAME` manually.  Each Amplify environment (sandbox, production branch, etc.) gets its own uniquely-named tables, eliminating the risk of accidental cross-environment data access.
 >
 > If you need to override the table names (e.g. when pointing to pre-existing tables without Amplify), set `DYNAMO_TABLE_NAME` and `DYNAMO_ANALYSIS_TABLE_NAME` in `app/.env`.
+>
+> If Bedrock returns `ValidationException` saying on-demand throughput is not supported, set `BEDROCK_INFERENCE_PROFILE_ID` (for Nova Lite in EU, commonly `eu.amazon.nova-lite-v1:0`).
 >
 > **Cognito settings** (`user_pool_id`, `user_pool_client_id`, `aws_region`) are likewise read automatically from `amplify_outputs.json`.  You only need to set them manually if you are not using Amplify to provision your Cognito User Pool.
 >
