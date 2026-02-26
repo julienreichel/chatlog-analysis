@@ -113,6 +113,25 @@
         </template>
 
         <div class="space-y-4">
+          <!-- Preset selector -->
+          <div>
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Start from a preset</p>
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                v-for="preset in LLM_PRESETS"
+                :key="preset.id"
+                size="xs"
+                variant="outline"
+                color="neutral"
+                @click="applyPreset(preset)"
+              >
+                {{ preset.label }}
+              </UButton>
+            </div>
+          </div>
+
+          <UDivider />
+
           <UFormField label="Name" required>
             <UInput v-model="newName" placeholder="e.g. Compliance Check" class="w-full" />
           </UFormField>
@@ -148,6 +167,8 @@
 
 <script setup lang="ts">
 import type { LlmCheckRecord } from '~/server/utils/dynamodb'
+import { LLM_PRESETS } from '~/utils/llmPresets'
+import type { LlmPreset } from '~/utils/llmPresets'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -294,6 +315,12 @@ async function handleTest(checkId: string) {
   finally {
     testingId.value = null
   }
+}
+
+function applyPreset(preset: LlmPreset) {
+  newName.value = preset.name
+  newPrompt.value = preset.prompt
+  newOutputSchema.value = preset.outputSchema
 }
 
 onMounted(() => fetchChecks())

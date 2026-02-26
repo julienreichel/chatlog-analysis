@@ -83,7 +83,131 @@
               </UBadge>
             </div>
           </template>
-          <pre class="bg-gray-100 dark:bg-gray-800 rounded p-3 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{{ JSON.stringify(call.results.result, null, 2) }}</pre>
+
+          <!-- Hate speech preset result -->
+          <template v-if="detectedPreset === 'hate-speech'">
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <UBadge :color="call.results.result.hasSpeech ? 'error' : 'success'" size="lg">
+                  {{ call.results.result.hasSpeech ? 'Hate speech detected' : 'No hate speech' }}
+                </UBadge>
+                <span class="text-sm text-gray-500">Score: {{ pct(call.results.result.score) }}</span>
+              </div>
+              <div v-if="call.results.result.categories" class="flex flex-wrap gap-2">
+                <UBadge
+                  v-for="(active, cat) in call.results.result.categories"
+                  :key="cat"
+                  :color="active ? 'error' : 'neutral'"
+                  variant="subtle"
+                >
+                  {{ cat }}
+                </UBadge>
+              </div>
+              <div v-if="call.results.result.flags?.length" class="space-y-1">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Flags</p>
+                <ul class="list-disc list-inside text-sm space-y-1">
+                  <li v-for="(flag, i) in call.results.result.flags" :key="i">{{ flag }}</li>
+                </ul>
+              </div>
+            </div>
+          </template>
+
+          <!-- Jailbreak preset result -->
+          <template v-else-if="detectedPreset === 'jailbreak'">
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <UBadge :color="call.results.result.isJailbreak ? 'error' : 'success'" size="lg">
+                  {{ call.results.result.isJailbreak ? 'Jailbreak detected' : 'No jailbreak attempt' }}
+                </UBadge>
+                <span class="text-sm text-gray-500">Confidence: {{ pct(call.results.result.score) }}</span>
+              </div>
+              <div v-if="call.results.result.techniques?.length" class="flex flex-wrap gap-2">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full">Techniques</p>
+                <UBadge v-for="(t, i) in call.results.result.techniques" :key="i" color="warning" variant="subtle">
+                  {{ t }}
+                </UBadge>
+              </div>
+              <p v-if="call.results.result.summary" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ call.results.result.summary }}
+              </p>
+            </div>
+          </template>
+
+          <!-- Hallucination preset result -->
+          <template v-else-if="detectedPreset === 'hallucination'">
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <UBadge :color="call.results.result.hasHallucination ? 'error' : 'success'" size="lg">
+                  {{ call.results.result.hasHallucination ? 'Hallucination detected' : 'No hallucinations' }}
+                </UBadge>
+                <span class="text-sm text-gray-500">Score: {{ pct(call.results.result.score) }}</span>
+              </div>
+              <div v-if="call.results.result.instances?.length" class="space-y-2">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Instances</p>
+                <div
+                  v-for="(inst, i) in call.results.result.instances"
+                  :key="i"
+                  class="bg-red-50 dark:bg-red-900/20 rounded p-2 text-sm"
+                >
+                  <span class="font-medium text-red-600 dark:text-red-400">Message {{ inst.messageIndex + 1 }}:</span>
+                  {{ inst.claim }}
+                </div>
+              </div>
+              <p v-if="call.results.result.summary" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ call.results.result.summary }}
+              </p>
+            </div>
+          </template>
+
+          <!-- Relevance preset result -->
+          <template v-else-if="detectedPreset === 'relevance'">
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 flex-wrap">
+                <UBadge :color="call.results.result.relevant ? 'success' : 'error'" size="lg">
+                  {{ call.results.result.relevant ? 'Relevant' : 'Not relevant' }}
+                </UBadge>
+                <UBadge :color="call.results.result.helpful ? 'success' : 'warning'" variant="subtle">
+                  {{ call.results.result.helpful ? 'Helpful' : 'Not helpful' }}
+                </UBadge>
+                <span class="text-sm text-gray-500">Score: {{ pct(call.results.result.score) }}</span>
+              </div>
+              <div v-if="call.results.result.issues?.length" class="space-y-1">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Issues</p>
+                <ul class="list-disc list-inside text-sm space-y-1">
+                  <li v-for="(issue, i) in call.results.result.issues" :key="i">{{ issue }}</li>
+                </ul>
+              </div>
+              <p v-if="call.results.result.summary" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ call.results.result.summary }}
+              </p>
+            </div>
+          </template>
+
+          <!-- Addiction preset result -->
+          <template v-else-if="detectedPreset === 'addiction'">
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <UBadge :color="call.results.result.hasDependency ? 'error' : 'success'" size="lg">
+                  {{ call.results.result.hasDependency ? 'Dependency detected' : 'No dependency patterns' }}
+                </UBadge>
+                <span class="text-sm text-gray-500">Score: {{ pct(call.results.result.score) }}</span>
+              </div>
+              <div v-if="call.results.result.patterns?.length" class="flex flex-wrap gap-2">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full">Patterns</p>
+                <UBadge v-for="(p, i) in call.results.result.patterns" :key="i" color="warning" variant="subtle">
+                  {{ p }}
+                </UBadge>
+              </div>
+              <p v-if="call.results.result.summary" class="text-sm text-gray-600 dark:text-gray-300">
+                {{ call.results.result.summary }}
+              </p>
+            </div>
+          </template>
+
+          <!-- Fallback: raw JSON -->
+          <template v-else>
+            <pre class="bg-gray-100 dark:bg-gray-800 rounded p-3 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{{ JSON.stringify(call.results.result, null, 2) }}</pre>
+          </template>
         </UCard>
 
         <!-- Per-message results -->
@@ -148,6 +272,8 @@
 </template>
 
 <script setup lang="ts">
+import { detectPreset } from '~/utils/llmPresets'
+
 definePageMeta({ middleware: 'auth' })
 
 const route = useRoute()
@@ -188,6 +314,11 @@ const filteredMessages = computed(() => {
 })
 
 const hasSummary = computed(() => call.value?.type !== 'llm' && !!call.value?.results?.summary)
+
+const detectedPreset = computed(() => {
+  if (call.value?.type !== 'llm') return null
+  return detectPreset(call.value?.results?.result)
+})
 
 function msgResult(idx: number) {
   return call.value?.results?.perMessage?.[idx] ?? null
