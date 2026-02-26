@@ -18,12 +18,37 @@
       <template v-else>
         <UTable :data="tableRows" :columns="columns">
           <template #hash-cell="{ row }">
-            <NuxtLink
-              :to="`/history/${row.original.latestCallId}`"
-              class="text-primary underline underline-offset-2 font-mono text-xs"
-            >
-              {{ row.original.hash }}
-            </NuxtLink>
+            <div class="space-y-2">
+              <NuxtLink
+                v-if="row.original.singleCallId"
+                :to="`/history/${row.original.singleCallId}`"
+                class="text-primary underline underline-offset-2 font-mono text-xs"
+              >
+                {{ row.original.hash }}
+              </NuxtLink>
+              <div v-else class="flex items-center gap-2 flex-wrap">
+                <span class="font-mono text-xs">{{ row.original.hash }}</span>
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  @click="toggleExpanded(row.original.hashFull)"
+                >
+                  {{ isExpanded(row.original.hashFull) ? 'Collapse' : `Expand (${row.original.callCount})` }}
+                </UButton>
+              </div>
+
+              <div v-if="row.original.callCount > 1 && isExpanded(row.original.hashFull)" class="space-y-1">
+                <NuxtLink
+                  v-for="call in row.original.calls"
+                  :key="call.callId"
+                  :to="`/history/${call.callId}`"
+                  class="block text-xs text-primary underline underline-offset-2"
+                >
+                  {{ formatDate(call.createdAt) }} · {{ call.type }} · {{ shortId(call.callId) }}
+                </NuxtLink>
+              </div>
+            </div>
           </template>
           <template #types-cell="{ row }">
             <div class="flex flex-wrap gap-1">
@@ -88,14 +113,16 @@ import type { DiscussionGroup } from '~/composables/useHistory'
 definePageMeta({ middleware: 'auth' })
 
 interface DiscussionRow {
+  hashFull: string
   hash: string
-  latestCallId: string
+  singleCallId: string | null
   latestCallAt: string
   messageCount: number
   callCount: number
   types: string[]
   sentiment: string | null
   maxToxicity: number | null
+  calls: { callId: string, type: string, createdAt: string }[]
 }
 
 const { groups, loading, error, hasMore, fetchHistory, loadMore } = useHistory()
@@ -121,9 +148,31 @@ function pct(score: number): string {
   return `${(score * 100).toFixed(1)}%`
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString()
+}
+
+function shortId(id: string): string {
+  return `${id.slice(0, 8)}…`
+}
+
+const expandedHashes = ref<Record<string, boolean>>({})
+
+function isExpanded(hash: string): boolean {
+  return !!expandedHashes.value[hash]
+}
+
+function toggleExpanded(hash: string): void {
+  expandedHashes.value = {
+    ...expandedHashes.value,
+    [hash]: !expandedHashes.value[hash],
+  }
+}
+
 function groupToRow(g: DiscussionGroup): DiscussionRow {
   // Use the pre-computed latestCallAt to find the most recent call
   const latestCall = g.calls.find(c => c.createdAt === g.latestCallAt) ?? g.calls[0]!
+  const sortedCalls = [...g.calls].sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1))
 
   // Sentiment overview: dominant from the latest sentiment call
   const sentimentCall = g.calls
@@ -138,14 +187,20 @@ function groupToRow(g: DiscussionGroup): DiscussionRow {
   const maxToxicity = toxicityCall?.results?.summary?.maxToxicity ?? null
 
   return {
+    hashFull: g.discussionHash,
     hash: g.discussionHash.slice(0, 8),
-    latestCallId: latestCall.callId,
+    singleCallId: g.calls.length === 1 ? latestCall.callId : null,
     latestCallAt: new Date(g.latestCallAt).toLocaleString(),
     messageCount: g.messages?.length ?? 0,
     callCount: g.calls.length,
     types: g.types,
     sentiment,
     maxToxicity,
+    calls: sortedCalls.map(c => ({
+      callId: c.callId,
+      type: c.type,
+      createdAt: c.createdAt,
+    })),
   }
 }
 
@@ -153,4 +208,3 @@ const tableRows = computed<DiscussionRow[]>(() => groups.value.map(groupToRow))
 
 onMounted(() => fetchHistory())
 </script>
-
