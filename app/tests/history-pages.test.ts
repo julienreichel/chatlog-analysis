@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { computeDiscussionHash } from '../server/utils/dynamodb'
+import type { DiscussionMessage, DiscussionGroup, DiscussionCallSummary, AnalysisType } from '../server/utils/dynamodb'
 
 // ─── formatDate helper (mirrors page logic) ───────────────────────────────────
 
@@ -289,5 +291,107 @@ describe('sentiment summary formatting', () => {
     })
     expect(result.dominant).toBe('NEUTRAL')
     expect(result.total).toBe(3)
+  })
+})
+
+// ─── computeDiscussionHash ────────────────────────────────────────────────────
+
+describe('computeDiscussionHash', () => {
+  const msgs: DiscussionMessage[] = [
+    { role: 'user', content: 'Hello' },
+    { role: 'assistant', content: 'Hi there' },
+  ]
+
+  it('returns a 64-char hex string', () => {
+    const hash = computeDiscussionHash(msgs)
+    expect(hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('same messages produce the same hash', () => {
+    expect(computeDiscussionHash(msgs)).toBe(computeDiscussionHash(msgs))
+  })
+
+  it('ignores message timestamps', () => {
+    const withTimestamps: DiscussionMessage[] = msgs.map(m => ({ ...m, timestamp: '2025-01-01T00:00:00Z' }))
+    expect(computeDiscussionHash(withTimestamps)).toBe(computeDiscussionHash(msgs))
+  })
+
+  it('different content produces different hash', () => {
+    const other: DiscussionMessage[] = [{ role: 'user', content: 'Different message' }]
+    expect(computeDiscussionHash(other)).not.toBe(computeDiscussionHash(msgs))
+  })
+
+  it('returns a consistent hash for empty messages', () => {
+    const h1 = computeDiscussionHash([])
+    const h2 = computeDiscussionHash([])
+    expect(h1).toBe(h2)
+    expect(h1).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+// ─── Discussion grouping logic (mirrors API endpoint logic) ──────────────────
+
+function groupCallsByHash(
+  calls: Array<{ callId: string, type: AnalysisType, createdAt: string, results: Record<string, unknown>, messages: DiscussionMessage[] }>,
+): Map<string, DiscussionGroup> {
+  const map = new Map<string, DiscussionGroup>()
+  for (const call of calls) {
+    const hash = computeDiscussionHash(call.messages)
+    const summary: DiscussionCallSummary = { callId: call.callId, type: call.type, createdAt: call.createdAt, results: call.results }
+    const existing = map.get(hash)
+    if (existing) {
+      existing.calls.push(summary)
+      if (call.createdAt > existing.latestCallAt) existing.latestCallAt = call.createdAt
+      if (!existing.types.includes(call.type)) existing.types.push(call.type)
+    }
+    else {
+      map.set(hash, { discussionHash: hash, messages: call.messages, latestCallAt: call.createdAt, calls: [summary], types: [call.type] })
+    }
+  }
+  return map
+}
+
+describe('discussion grouping', () => {
+  const msgs1: DiscussionMessage[] = [{ role: 'user', content: 'Hello' }]
+  const msgs2: DiscussionMessage[] = [{ role: 'user', content: 'Different' }]
+
+  const callA = { callId: 'call-1', type: 'sentiment' as AnalysisType, createdAt: '2025-06-01T10:00:00Z', results: {}, messages: msgs1 }
+  const callB = { callId: 'call-2', type: 'toxicity' as AnalysisType, createdAt: '2025-06-01T11:00:00Z', results: {}, messages: msgs1 }
+  const callC = { callId: 'call-3', type: 'sentiment' as AnalysisType, createdAt: '2025-06-01T09:00:00Z', results: {}, messages: msgs2 }
+
+  it('groups two calls with the same messages into one group', () => {
+    const groups = groupCallsByHash([callA, callB])
+    expect(groups.size).toBe(1)
+    const [group] = groups.values()
+    expect(group!.calls).toHaveLength(2)
+  })
+
+  it('keeps distinct conversations in separate groups', () => {
+    const groups = groupCallsByHash([callA, callC])
+    expect(groups.size).toBe(2)
+  })
+
+  it('collects all analysis types for a group', () => {
+    const groups = groupCallsByHash([callA, callB])
+    const [group] = groups.values()
+    expect(group!.types).toContain('sentiment')
+    expect(group!.types).toContain('toxicity')
+  })
+
+  it('does not duplicate types when the same type appears twice', () => {
+    const callA2 = { ...callA, callId: 'call-4' }
+    const groups = groupCallsByHash([callA, callA2])
+    const [group] = groups.values()
+    expect(group!.types.filter(t => t === 'sentiment')).toHaveLength(1)
+  })
+
+  it('tracks latestCallAt as the maximum createdAt', () => {
+    const groups = groupCallsByHash([callA, callB])
+    const [group] = groups.values()
+    expect(group!.latestCallAt).toBe('2025-06-01T11:00:00Z')
+  })
+
+  it('handles an empty call list', () => {
+    expect(groupCallsByHash([]).size).toBe(0)
   })
 })
