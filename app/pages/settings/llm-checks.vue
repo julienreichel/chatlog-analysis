@@ -130,7 +130,7 @@
             </div>
           </div>
 
-          <UDivider />
+          <USeparator />
 
           <UFormField label="Name" required>
             <UInput v-model="newName" placeholder="e.g. Compliance Check" class="w-full" />
