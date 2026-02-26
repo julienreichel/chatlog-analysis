@@ -30,7 +30,7 @@ import {
   UpdateCommand,
   DeleteCommand,
 } from '@aws-sdk/lib-dynamodb'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -246,6 +246,16 @@ export interface DiscussionMetadata {
 
 export type AnalysisType = 'sentiment' | 'toxicity' | 'llm'
 
+/**
+ * Compute a SHA-256 hash of the discussion content (role + content of each
+ * message, timestamps excluded).  Identical conversations produce the same hash
+ * regardless of when or how many times they were analysed.
+ */
+export function computeDiscussionHash(messages: DiscussionMessage[]): string {
+  const normalized = messages.map(m => ({ role: m.role, content: m.content }))
+  return createHash('sha256').update(JSON.stringify(normalized)).digest('hex')
+}
+
 export interface AnalysisCallRecord {
   userId: string
   callId: string
@@ -256,6 +266,30 @@ export interface AnalysisCallRecord {
   metadata?: DiscussionMetadata
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   results: Record<string, any>
+}
+
+// ─── Discussion Grouping Types ───────────────────────────────────────────────
+
+/** Lightweight summary of one analysis call, used inside a DiscussionGroup. */
+export interface DiscussionCallSummary {
+  callId: string
+  type: AnalysisType
+  createdAt: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  results: Record<string, any>
+}
+
+/**
+ * A group of analysis calls that share the same discussion content (same hash).
+ * Multiple endpoints may have processed the same conversation – they are
+ * combined into one group for display.
+ */
+export interface DiscussionGroup {
+  discussionHash: string
+  messages: DiscussionMessage[]
+  latestCallAt: string
+  calls: DiscussionCallSummary[]
+  types: AnalysisType[]
 }
 
 // ─── Analysis Request Persistence ────────────────────────────────────────────
@@ -331,14 +365,21 @@ export async function createAnalysisCall(
 
 /**
  * List analysis calls for a user, newest first.
+ * Supports cursor-based pagination via DynamoDB LastEvaluatedKey.
+ * Returns up to `limit` records and an optional `nextCursor` for subsequent pages.
  */
 export async function listAnalysisCalls(
   userId: string,
   tableName: string,
   region: string,
-  limit = 50,
-): Promise<AnalysisCallRecord[]> {
+  limit = 20,
+  cursor?: string,
+): Promise<{ calls: AnalysisCallRecord[], nextCursor?: string }> {
   const client = getDocClient(region)
+
+  const exclusiveStartKey = cursor
+    ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    : undefined
 
   const result = await client.send(new QueryCommand({
     TableName: tableName,
@@ -349,9 +390,10 @@ export async function listAnalysisCalls(
     },
     ScanIndexForward: false,
     Limit: limit,
+    ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
   }))
 
-  return (result.Items ?? []).map(item => ({
+  const calls = (result.Items ?? []).map(item => ({
     userId: item.userId as string,
     callId: item.callId as string,
     createdAt: item.createdAt as string,
@@ -361,6 +403,12 @@ export async function listAnalysisCalls(
     metadata: item.metadata as DiscussionMetadata | undefined,
     results: item.results as Record<string, unknown>,
   }))
+
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64url')
+    : undefined
+
+  return { calls, nextCursor }
 }
 
 /**
