@@ -7,7 +7,7 @@
     "amplify"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=app",
+    "dev": "npm run dev --workspace=app -- --host 0.0.0.0",
     "build": "npm run build --workspace=app",
     "aws:policy": "node scripts/aws-iam-helper.mjs --print-policy",
     "aws:ci-check": "node scripts/aws-iam-helper.mjs --ci-check",
